@@ -46,7 +46,7 @@ abstract contract UniswapV3PoolEmulator {
 		// the current price
 		uint160 sqrtPriceX96;
 		// the current tick
-		int24 reserved0;
+		int24 tick;
 		// the most-recently updated index of the observations array
 		uint16 observationIndex;
 		// the current maximum number of observations that are being stored
@@ -71,29 +71,34 @@ abstract contract UniswapV3PoolEmulator {
 
 	Slot0Modified public slot0;
 
-	Oracle.Observation[65535] public override observations;
+	Oracle.Observation[65535] public /*override*/ observations;
 
-	constructor(uint160 sqrtPriceX96, int24 tick, address _factory, address _token0, address _token1, uint24 _fee) {
+	constructor(uint160 sqrtPriceX96, address _factory, address _token0, address _token1, uint24 _fee) {
 		if (token0 < token1)
 			(factory, token0, token1, fee) = (_factory, _token0, _token1, _fee);
 		else
 			(factory, token0, token1, fee) = (_factory, _token1, _token0, _fee);
 
+		// Storage initialization
+		int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+
+		(uint16 cardinality, uint16 cardinalityNext) = observations.initialize(_blockTimestamp());
+
 		slot0 = Slot0Modified({
 			sqrtPriceX96: sqrtPriceX96,
+			tick: tick,
 			observationIndex: 0,
-			observationCardinality: 0,
-			observationCardinalityNext: 0,
-			reserved0: 0,
+			observationCardinality: cardinality,
+			observationCardinalityNext: cardinalityNext,
 			reserved1: 0,
-			reserved2: false
+			reserved2: true
 		});
 
 		emit Initialize(sqrtPriceX96, tick);
 	}
 
 	/// @dev Doesn't do anything since we initialize in constructor
-	function initialize() external override {}
+	function initialize() external /*override*/ {}
 
 	/// @dev Mutually exclusive reentrancy protection into the pool to/from a method. This method also prevents entrance
 	/// to a function before the pool is initialized. The reentrancy guard is required throughout the contract because
@@ -133,11 +138,8 @@ abstract contract UniswapV3PoolEmulator {
 		return abi.decode(data, (uint256));
 	}
 
-	/// @inheritdoc IUniswapV3PoolDerivedState
-	function snapshotCumulativesInside(int24 tickLower, int24 tickUpper) external view override returns (int56 tickCumulativeInside, uint160 secondsPerLiquidityInsideX128, uint32 secondsInside) {
-		checkTicks(tickLower, tickUpper);
-
-		int56 tickCumulativeLower;
+	function snapshotCumulativesInside(int24 tickLower, int24 tickUpper) external view /*override*/ returns (int56 tickCumulativeInside, uint160 secondsPerLiquidityInsideX128, uint32 secondsInside) {
+		/*int56 tickCumulativeLower;
 		int56 tickCumulativeUpper;
 		uint160 secondsPerLiquidityOutsideLowerX128;
 		uint160 secondsPerLiquidityOutsideUpperX128;
@@ -197,23 +199,22 @@ abstract contract UniswapV3PoolEmulator {
 				secondsPerLiquidityOutsideUpperX128 - secondsPerLiquidityOutsideLowerX128,
 				secondsOutsideUpper - secondsOutsideLower
 			);
-		}
+		}*/
+		revert("Not implemented");
 	}
 
-	/// @inheritdoc IUniswapV3PoolDerivedState
-	function observe(uint32[] calldata secondsAgos) external view override returns (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s) {
+	function observe(uint32[] calldata secondsAgos) external view /*override*/ returns (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s) {
 		return observations.observe(
 			_blockTimestamp(),
 			secondsAgos,
 			slot0.tick,
 			slot0.observationIndex,
-			liquidity,
+			liquidity(),
 			slot0.observationCardinality
 		);
 	}
 
-	/// @inheritdoc IUniswapV3PoolActions
-	function increaseObservationCardinalityNext(uint16 observationCardinalityNext) external override lock {
+	function increaseObservationCardinalityNext(uint16 observationCardinalityNext) external /*override*/ lock {
 		uint16 observationCardinalityNextOld = slot0.observationCardinalityNext; // for the event
 		uint16 observationCardinalityNextNew = observations.grow(
 			observationCardinalityNextOld,
@@ -224,15 +225,15 @@ abstract contract UniswapV3PoolEmulator {
 			emit IncreaseObservationCardinalityNext(observationCardinalityNextOld, observationCardinalityNextNew);
 	}
 
-	function mint(address recipient, int24 tickLower, int24 tickUpper, uint128 amount, bytes calldata data) external override lock returns (uint256 amount0, uint256 amount1) {
+	function mint(address recipient, int24 tickLower, int24 tickUpper, uint128 amount, bytes calldata data) external /*override*/ lock returns (uint256 amount0, uint256 amount1) {
 		revert("Not Implemented");
 	}
 
-	function collect(address recipient, int24 tickLower, int24 tickUpper, uint128 amount0Requested, uint128 amount1Requested) external override lock returns (uint128 amount0, uint128 amount1) {
+	function collect(address recipient, int24 tickLower, int24 tickUpper, uint128 amount0Requested, uint128 amount1Requested) external /*override*/ lock returns (uint128 amount0, uint128 amount1) {
 		revert("Not Implemented");
 	}
 
-	function burn(int24 tickLower, int24 tickUpper, uint128 amount) external override lock returns (uint256 amount0, uint256 amount1) {
+	function burn(int24 tickLower, int24 tickUpper, uint128 amount) external /*override*/ lock returns (uint256 amount0, uint256 amount1) {
 		revert("Not Implemented");
 	}
 
@@ -292,9 +293,9 @@ abstract contract UniswapV3PoolEmulator {
 		if (newTick != slot0Start.tick) {
 			(uint16 observationIndex, uint16 observationCardinality) = observations.write(
 				slot0Start.observationIndex,
-				cache.blockTimestamp,
+				_blockTimestamp(),
 				slot0Start.tick,
-				cache.liquidityStart,
+				liquidity(),
 				slot0Start.observationCardinality,
 				slot0Start.observationCardinalityNext
 			);
@@ -306,7 +307,7 @@ abstract contract UniswapV3PoolEmulator {
 			);
 		} else
 			// otherwise just update the price
-			slot0.sqrtPriceX96 = state.sqrtPriceX96;
+			slot0.sqrtPriceX96 = newSqrtPriceX96;
 
 		// Perform the swap
 		uint256 balanceBefore = balance(zeroForOne ? token0 : token1);
