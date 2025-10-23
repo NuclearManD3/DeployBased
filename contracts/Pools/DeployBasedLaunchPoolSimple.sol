@@ -87,12 +87,15 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		return uint128(curveLimit * Math.sqrt(initialLaunchTokens));
 	}
 
-	struct Reserves {
-		uint128 reserve0;
-		uint128 reserve1;
+	uint256 internal _reserves;
+	function reserves() public view returns (uint128, uint128) {
+		uint256 tmp = _reserves;
+		return (uint128(tmp & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF), uint128(tmp >> 128));
 	}
-	/// Reserves
-	Reserves public reserves;
+	function setReserves(uint256 a, uint256 b) internal {
+		require((a >> 128) == 0 && (b >> 128) == 0);
+		_reserves = a | (b << 128);
+	}
 
 	function feeGrowthGlobal0X128() public override view returns (uint256) {
 		return 0; //Math.mulDiv(balance(token0) + claimedFees0, 1 << 128, liquidity);
@@ -149,7 +152,7 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 
 	function computeExpectedTokensOut(address inputToken, uint256 tokensIn, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensInActual, uint256 tokensOut, uint160 newSqrtPriceX96) {
 		uint256 tokensRemaining = tokensIn;
-		(uint128 reserve0, uint128 reserve1) = reserves;
+		(uint128 reserve0, uint128 reserve1) = reserves();
 		uint256 x0 = uint256(poolPolarity ? reserve0 : reserve1);
 		uint256 y0 = uint256(poolPolarity ? reserve1 : reserve0);
 
@@ -220,7 +223,7 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 
 	function computeExpectedTokensIn(address inputToken, uint256 tokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensIn, uint256 tokensOutActual, uint160 newSqrtPriceX96) {
 		uint256 tokensRemaining = tokensOut;
-		(uint128 reserve0, uint128 reserve1) = reserves;
+		(uint128 reserve0, uint128 reserve1) = reserves();
 		uint256 x0 = uint256(poolPolarity ? reserve0 : reserve1);
 		uint256 y0 = uint256(poolPolarity ? reserve1 : reserve0);
 
@@ -340,7 +343,7 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		uint256 amount0 = balance(token0);
 		uint256 amount1 = balance(token1);
 		{
-			(uint128 reserve0, uint128 reserve1) = reserves;
+			(uint128 reserve0, uint128 reserve1) = reserves();
 			amount0 -= uint256(reserve0);
 			amount1 -= uint256(reserve1);
 		}
@@ -355,15 +358,15 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 	}
 
 	function donate(uint128 amount0, uint128 amount1) external lock returns (uint128, uint128) {
-		Reserves memory tmp = reserves;
+		(uint128 reserve0, uint128 reserve1) = reserves();
 
 		// Correct the input amounts to match our reserves
-		if (tmp.reserve1 == 0)
+		if (reserve1 == 0)
 			amount1 = 0;
-		else if (tmp.reserve0 == 0)
+		else if (reserve0 == 0)
 			amount0 = 0;
 		else {
-			uint256 ratioNeeded = (uint256(tmp.reserve0) << 128) / uint256(tmp.reserve1);
+			uint256 ratioNeeded = (uint256(reserve0) << 128) / uint256(reserve1);
 			uint256 ratio = (uint256(amount0) << 128) / uint256(amount1);
 			if (ratio > ratioNeeded)
 				amount0 = uint128((ratioNeeded * amount1) >> 128);
@@ -372,14 +375,14 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		}
 
 		// Update curveLimit
-		uint256 ratio = 0x100000000000000000000000000000000 + (poolPolarity ? (uint256(amount0) << 128) / tmp.reserve0 : (uint256(amount1) << 128) / tmp.reserve1);
+		uint256 ratio = 0x100000000000000000000000000000000 + (poolPolarity ? (uint256(amount0) << 128) / reserve0 : (uint256(amount1) << 128) / reserve1);
 		curveLimit = Math.mulDiv(curveLimit, ratio, 0x100000000000000000000000000000000);
 
 		require(IERC20(token0).transferFrom(msg.sender, address(this), amount0));
 		require(IERC20(token1).transferFrom(msg.sender, address(this), amount1));
-		tmp.reserve0 += amount0;
-		tmp.reserve1 += amount1;
-		reserves = tmp;
+		reserve0 += amount0;
+		reserve1 += amount1;
+		setReserves(reserve0, reserve1);
 
 		return (amount0, amount1);
 	}
