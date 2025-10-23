@@ -37,6 +37,9 @@ struct LaunchPoolInitParams {
 
 	/// Amount of launch tokens to add to the pool
 	uint128 initialLaunchTokens;
+
+	/// Initial reserve offset, recomputed on donate
+	uint128 reserveOffset;
 }
 
 
@@ -68,13 +71,16 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 	bool internal immutable poolPolarity;
 
 	// CURVE CONFIGURATION
-	uint160 immutable public minimumPrice;
+	// This is the minimum price in reserve per launch, 128.128 format
+	uint256 immutable public minimumPrice128128;
 	/// How fast the price will rise for the initial curve
 	/// P = minimumPrice + priceMultiple * reserveTokensHeld / curveLimit
 	/// Encoded in 128.128 form
 	uint256 immutable internal priceMultiple;
 	/// Amount of reserve tokens needed to switch to xy = k mode
 	uint256 internal curveLimit;
+	/// b term in (x + b)y = k
+	uint256 internal reserveOffset;
 
 	uint128 immutable internal initialLaunchTokens;
 	function liquidity() public override view returns (uint128) {
@@ -102,14 +108,25 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		_;
 	}
 
-	constructor(address _reserve, address _launch, address _lend, uint24 _fee, LaunchPoolInitParams memory initParams)
+	constructor(address _reserve, address _launch, uint24 _fee, LaunchPoolInitParams memory initParams)
 		UniswapV3PoolEmulator(initParams.sqrtPriceX96, msg.sender, _reserve, _launch, _fee) {
+
 		// Initialize immutables
-		(reserve, launch, lendingPool) = (_reserve, _launch, ICompoundV3Pool(_lend));
-		if (_launch < _reserve)
+		(reserve, launch, lendingPool) = (_reserve, _launch, ICompoundV3Pool(initParams.lendingPoolAddress));
+		priceMultiple = uint256(initParams.priceMultiple);
+		curveLimit = uint256(initParams.curveLimit);
+		reserveOffset = uint256(initParams.reserveOffset);
+
+		uint256 priceTmp = initParams.sqrtPriceX96;
+		priceTmp = Math.mulDiv(priceTmp, priceTmp, 0x10000000000000000 /* 1 << (192 - 128) */);
+		if (_launch < _reserve) {
 			poolPolarity = false;
-		else
+			priceTmp = 0x100000000000000000000000000000000 / priceTmp;
+		} else {
 			poolPolarity = true;
+		}
+
+		minimumPrice128128 = priceTmp;
 	}
 
 	/**
