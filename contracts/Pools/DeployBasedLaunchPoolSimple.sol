@@ -77,7 +77,7 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 	uint256 internal curveLimit;
 
 	uint128 immutable internal initialLaunchTokens;
-	function liquidity() external override view returns (uint128) {
+	function liquidity() public override view returns (uint128) {
 		return uint128(curveLimit * Math.sqrt(initialLaunchTokens));
 	}
 
@@ -102,13 +102,14 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		_;
 	}
 
-	constructor(address _reserve, address _launch, address _lend, uint24 _fee, LaunchPoolInitParams calldata initParams) {
+	constructor(address _reserve, address _launch, address _lend, uint24 _fee, LaunchPoolInitParams memory initParams)
+		UniswapV3PoolEmulator(initParams.sqrtPriceX96, msg.sender, _reserve, _launch, _fee) {
 		// Initialize immutables
-		(factory, reserve, launch, lendingPool, fee) = (msg.sender, _reserve, _launch, _lend, _fee);
+		(reserve, launch, lendingPool) = (_reserve, _launch, ICompoundV3Pool(_lend));
 		if (_launch < _reserve)
-			(token0, token1, poolPolarity) = (_launch, _reserve, 0);
+			poolPolarity = false;
 		else
-			(token0, token1, poolPolarity) = (_reserve, _launch, 1);
+			poolPolarity = true;
 	}
 
 	/**
@@ -129,71 +130,167 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 	***
 	**/
 
-	function computeExpectedTokensOut(address inputToken, uint256 tokensIn, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensOut, uint160 newSqrtPriceX96) {
+	function computeExpectedTokensOut(address inputToken, uint256 tokensIn, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensInActual, uint256 tokensOut, uint160 newSqrtPriceX96) {
+		uint256 tokensRemaining = tokensIn;
+		(uint128 reserve0, uint128 reserve1) = reserves;
+		uint256 x0 = uint256(poolPolarity ? reserve0 : reserve1);
+		uint256 y0 = uint256(poolPolarity ? reserve1 : reserve0);
+
+		// Convert sqrtPriceX96 and sqrtPriceLimitX96 to 128.128 encoding
+		uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
+		uint256 priceLimit = Math.mulDiv(sqrtPriceLimitX96, sqrtPriceLimitX96, 0x10000000000000000 /* 1 << (192 - 128) */);
+		if (!poolPolarity)
+			(lastPrice, priceLimit) = (0x100000000000000000000000000000000 / lastPrice, 0x100000000000000000000000000000000 / priceLimit);
+
+		uint256 newPrice;
 		if (inputToken == reserve) {
 			// Purchasing launch tokens - price will go from initial curve to xyk curve
 
+			if (x0 < curveLimit) {
+				// Purchasing launch tokens - price will go from initial curve to xyk curve
+				uint256 M = priceMultiple / curveLimit;
+
+				// Check if swap stays within initial curve
+				uint256 tokensInTmp = tokensIn;
+				if (x0 + tokensInTmp > curveLimit)
+					// Go to the maximum number of input tokens for this part of the curve
+					tokensInTmp = curveLimit - x0;
+
+				// Compute dy = dx / (lastPrice + M * dx / 2)
+				uint256 denominator = lastPrice + ((M * tokensInTmp) >> 1);
+				tokensOut = Math.mulDiv(tokensInTmp, 0x100000000000000000000000000000000, denominator);
+
+				// Calculate new price: P = lastPrice + M * dx
+				newPrice = lastPrice + M * tokensInTmp;
+
+				if (newPrice > priceLimit)
+					// Price exceeds limit, compute at price limit
+					// We also specify here that no more tokens remain for swapping, since the price limit was reached
+					(tokensOut, newPrice, tokensRemaining) = (, priceLimit, 0);
+				else
+					// Compute the number of unconverted tokens
+					tokensRemaining -= tokensInTmp;
+			} else
+				tokensIn = 0;
+
+			if (tokensRemaining > 0) {
+				// Compute for (x + b)y = k
+				//   vx = x + b (virtual liquidity x)
+				//   b = curveLimit
+				uint256 vx = uint256(x0 + curveLimit);
+				uint256 K = vx * uint256(y0);
+				uint256 y1 = y0 - tokensOut;
+				uint256 tokensInTmp = (K / y1) - vx;
+				newPrice = Math.mulDiv(0x100000000000000000000000000000000, vx + tokensInTmp, y1);
+
+				if (newPrice > priceLimit) {
+					// Price exceeds limit, compute at price limit
+					// tokensRemaining doesn't need to be set because it is not checked again
+					//   priceLimit = (vx + tokensInTmp) / y1
+					//   y1 = K / (vx + tokensInTmp)
+					//   priceLimit * y1 = (vx + tokensInTmp)^2
+					//   tokensInTmp = sqrt(priceLimit * y1) - vx
+					newPrice = priceLimit;
+					tokensInTmp = Math.sqrt(Math.mulDiv(priceLimit, y1, 0x100000000000000000000000000000000)) - vx;
+				}
+
+				tokensIn += tokensInTmp;
+			}
 		} else {
 			// Selling launch tokens - price will go from xyk curve to initial curve
 		}
 	}
 
-	function computeExpectedTokensIn(address inputToken, uint256 tokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensIn, uint160 newSqrtPriceX96) {
+	function computeExpectedTokensIn(address inputToken, uint256 tokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensIn, uint256 tokensOutActual, uint160 newSqrtPriceX96) {
 		uint256 tokensRemaining = tokensOut;
 		(uint128 reserve0, uint128 reserve1) = reserves;
 		uint256 x0 = uint256(poolPolarity ? reserve0 : reserve1);
-		uint256 y0 = initialLaunchTokens;
+		uint256 y0 = uint256(poolPolarity ? reserve1 : reserve0);
 
+		// Convert sqrtPriceX96 and sqrtPriceLimitX96 to 128.128 encoding
+		uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
+		uint256 priceLimit = Math.mulDiv(sqrtPriceLimitX96, sqrtPriceLimitX96, 0x10000000000000000 /* 1 << (192 - 128) */);
+		if (!poolPolarity)
+			(lastPrice, priceLimit) = (0x100000000000000000000000000000000 / lastPrice, 0x100000000000000000000000000000000 / priceLimit);
+
+		uint256 newPrice;
 		if (inputToken == reserve) {
-			if (reserveAmount < curveLimit) {
-				// TODO: Check, simplify, and secure
-				// Purchasing launch tokens - price will go from initial curve to xyk curve
-				uint256 y = tokensRemaining; // dy, launch tokens out (wei)
+			require(y0 > tokensOut, "IL");
 
-				// Convert sqrtPriceX96 to 128.128 encoding
-				uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
+			if (x0 < curveLimit) {
+				// Purchasing launch tokens - price will go from initial curve to xyk curve
 				uint256 M = priceMultiple / curveLimit;
 
 				// Compute dx = dy * lastPrice / (1 - M * dy / 2)
-				uint256 denominator = 0x100000000000000000000000000000000 - ((M * y) >> 1);
-				require(denominator > 0, "Invalid swap: denominator zero");
-				tokensIn = Math.mulDiv(y, lastPrice, denominator);
-				require(tokensIn > 0, "Invalid swap: zero input");
+				uint256 denominator = 0x100000000000000000000000000000000 - ((M * tokensRemaining) >> 1);
+				tokensIn = Math.mulDiv(tokensRemaining, lastPrice, denominator);
 
 				// Check if swap stays within initial curve
-				if (x0 + tokensIn > curveLimit) {
-					// Recompute for the maximum tokens
+				if (x0 + tokensIn > curveLimit)
+					// Go to the maximum number of input tokens for this part of the curve
+					tokensIn = curveLimit - x0;
 
-				} else {
-					// Calculate new price: P = lastPrice + M * dx
-					uint256 newPrice = lastPrice + M * tokensIn;
+				// Calculate new price: P = lastPrice + M * dx
+				newPrice = lastPrice + M * tokensIn;
 
-					// Convert to sqrtPriceX96
-					newSqrtPriceX96 = uint160(Math.sqrt(newPrice) * (1 << 96));
+				if (newPrice > priceLimit)
+					// Price exceeds limit, compute at price limit
+					// We also specify here that no more tokens remain for swapping, since the price limit was reached
+					(tokensIn, newPrice, tokensRemaining) = ((priceLimit - lastPrice) / M, priceLimit, 0);
+				else {
+					// dy = dx / (lastPrice + M * dx / 2)
+					uint256 tokensOutTmp = Math.mulDiv(tokensIn, 0x100000000000000000000000000000000, lastPrice + ((M * tokensIn) >> 1));
 
-					// Check price limit
-					require(newSqrtPriceX96 <= sqrtPriceLimitX96, "Price exceeds limit");
+					// Compute the number of unconverted tokens
+					tokensRemaining = tokensOutTmp < tokensRemaining ? tokensRemaining - tokensOutTmp : 0;
 				}
-
-				tokensRemaining = 0; // All tokens processed in initial curve
-			}
+			} else
+				tokensIn = 0;
 
 			if (tokensRemaining > 0) {
-				// Compute for xy = k
+				// Compute for (x + b)y = k
+				//   vx = x + b (virtual liquidity x)
+				// Note that x now must also contain the tokens 
+				uint256 vx = uint256(x0 + b + tokensIn);
+				uint256 K = vx * uint256(y0);
+				uint256 y1 = y0 - tokensOut;
+				uint256 tokensInTmp = (K / y1) - vx;
+				newPrice = Math.mulDiv(0x100000000000000000000000000000000, vx + tokensInTmp, y1);
+
+				if (newPrice > priceLimit) {
+					// Price exceeds limit, compute at price limit
+					// tokensRemaining doesn't need to be set because it is not checked again
+					//   priceLimit = (vx + tokensInTmp) / y1
+					//   y1 = K / (vx + tokensInTmp)
+					//   priceLimit * y1 = (vx + tokensInTmp)^2
+					//   tokensInTmp = sqrt(priceLimit * y1) - vx
+					newPrice = priceLimit;
+					tokensInTmp = Math.sqrt(Math.mulDiv(priceLimit, y1, 0x100000000000000000000000000000000)) - vx;
+				}
+
+				tokensIn += tokensInTmp;
 			}
 		} else {
 			// Selling launch tokens - price will go from xyk curve to initial curve
+			if (x0 > curveLimit) {
+
+			}
 		}
+
+		// Convert to sqrtPriceX96
+		newSqrtPriceX96 = uint160(Math.sqrt(newPrice) * (1 << 96));
+		if (!poolPolarity)
+			newSqrtPriceX96 = 0x100000000000000000000000000000000 / newSqrtPriceX96;
 	}
 
-	function payTokensToSwapper(address token, uint256 amount, address recipient) internal virtual {
+	function payTokensToSwapper(address token, uint256 amount, address recipient) internal override {
 		if (token == reserve)
 			lendingPool.withdrawTo(recipient, reserve, amount);
 		else
-			require(IERC20(token).transfer(recipient));
+			require(IERC20(token).transfer(recipient, amount));
 	}
 
-	function acceptTokensFromSwapper(address token, uint256 amount) internal virtual {
+	function acceptTokensFromSwapper(address token, uint256 amount) internal override {
 		if (token == reserve) {
 			amount = IERC20(reserve).balanceOf(address(this));
 			IERC20(reserve).approve(address(lendingPool), amount);
@@ -213,7 +310,7 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 			(bool success, bytes memory data) = token.staticcall(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
 			require(success && data.length >= 32);
 			total = abi.decode(data, (uint256));
-			token = lendingPool;
+			token = address(lendingPool);
 		}
 
 		(bool success, bytes memory data) = token.staticcall(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
@@ -222,7 +319,7 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		return total;
 	}
 
-	function collect(address recipient, int24 tickLower, int24 tickUpper, uint128 amount0Requested, uint128 amount1Requested) external override lock onlyOwner returns (uint128 amount0, uint128 amount1) {
+	function collect(address recipient, int24 tickLower, int24 tickUpper, uint128 amount0Requested, uint128 amount1Requested) external override lock onlyOwner returns (uint128, uint128) {
 		uint256 amount0 = balance(token0);
 		uint256 amount1 = balance(token1);
 		{
@@ -236,6 +333,8 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		payTokensToSwapper(token1, amount1 - protocolFee1, recipient);
 		payTokensToSwapper(token0, protocolFee0, factory);
 		payTokensToSwapper(token1, protocolFee1, factory);
+
+		return (uint128(amount0 - protocolFee0), uint128(amount1 - protocolFee1));
 	}
 
 	function donate(uint128 amount0, uint128 amount1) external lock returns (uint128, uint128) {
@@ -256,11 +355,11 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		}
 
 		// Update curveLimit
-		uint256 ratio = 0x100000000000000000000000000000000 + poolPolarity ? (uint256(amount0) << 128) / tmp.reserve0 : (uint256(amount1) << 128) / tmp.reserve1;
+		uint256 ratio = 0x100000000000000000000000000000000 + (poolPolarity ? (uint256(amount0) << 128) / tmp.reserve0 : (uint256(amount1) << 128) / tmp.reserve1);
 		curveLimit = Math.mulDiv(curveLimit, ratio, 0x100000000000000000000000000000000);
 
-		require(IERC20(token0).transferFrom(msg.sender, amount0));
-		require(IERC20(token1).transferFrom(msg.sender, amount1));
+		require(IERC20(token0).transferFrom(msg.sender, address(this), amount0));
+		require(IERC20(token1).transferFrom(msg.sender, address(this), amount1));
 		tmp.reserve0 += amount0;
 		tmp.reserve1 += amount1;
 		reserves = tmp;

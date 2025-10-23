@@ -225,15 +225,15 @@ abstract contract UniswapV3PoolEmulator {
 			emit IncreaseObservationCardinalityNext(observationCardinalityNextOld, observationCardinalityNextNew);
 	}
 
-	function mint(address recipient, int24 tickLower, int24 tickUpper, uint128 amount, bytes calldata data) external /*override*/ lock returns (uint256 amount0, uint256 amount1) {
+	function mint(address recipient, int24 tickLower, int24 tickUpper, uint128 amount, bytes calldata data) external /*override*/virtual lock returns (uint256 amount0, uint256 amount1) {
 		revert("Not Implemented");
 	}
 
-	function collect(address recipient, int24 tickLower, int24 tickUpper, uint128 amount0Requested, uint128 amount1Requested) external /*override*/ lock returns (uint128 amount0, uint128 amount1) {
+	function collect(address recipient, int24 tickLower, int24 tickUpper, uint128 amount0Requested, uint128 amount1Requested) external /*override*/virtual lock returns (uint128 amount0, uint128 amount1) {
 		revert("Not Implemented");
 	}
 
-	function burn(int24 tickLower, int24 tickUpper, uint128 amount) external /*override*/ lock returns (uint256 amount0, uint256 amount1) {
+	function burn(int24 tickLower, int24 tickUpper, uint128 amount) external /*override*/virtual lock returns (uint256 amount0, uint256 amount1) {
 		revert("Not Implemented");
 	}
 
@@ -241,8 +241,8 @@ abstract contract UniswapV3PoolEmulator {
 	*** SWAP LOGIC
 	**/
 
-	function computeExpectedTokensOut(address inputToken, uint256 tokensIn, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public virtual view returns (uint256 tokensOut, uint160 newSqrtPriceX96);
-	function computeExpectedTokensIn(address inputToken, uint256 tokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public virtual view returns (uint256 tokensIn, uint160 newSqrtPriceX96);
+	function computeExpectedTokensOut(address inputToken, uint256 tokensIn, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public virtual view returns (uint256 tokensInActual, uint256 tokensOut, uint160 newSqrtPriceX96);
+	function computeExpectedTokensIn(address inputToken, uint256 tokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public virtual view returns (uint256 tokensIn, uint256 tokensOutActual, uint160 newSqrtPriceX96);
 	function payTokensToSwapper(address token, uint256 amount, address recipient) internal virtual;
 	function acceptTokensFromSwapper(address token, uint256 amount) internal virtual;
 	function computeFlashLoanFee(uint256 amount0, uint256 amount1) public virtual view returns (uint256 fee0, uint256 fee1) {
@@ -278,14 +278,14 @@ abstract contract UniswapV3PoolEmulator {
 		uint160 newSqrtPriceX96;
 		if (exactInput) {
 			tokensIn = uint256(amountSpecified);
-			(tokensOut, newSqrtPriceX96) = computeExpectedTokensOut(zeroForOne ? token0 : token1, tokensIn, slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
-			amount0 = zeroForOne ? amountSpecified : -int256(tokensOut);
-			amount1 = zeroForOne ? -int256(tokensOut) : amountSpecified;
+			(tokensIn, tokensOut, newSqrtPriceX96) = computeExpectedTokensOut(zeroForOne ? token0 : token1, tokensIn, slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
+			amount0 = zeroForOne ? int256(tokensIn) : -int256(tokensOut);
+			amount1 = zeroForOne ? -int256(tokensOut) : int256(tokensIn);
 		} else {
 			tokensOut = uint256(-amountSpecified);
-			(tokensIn, newSqrtPriceX96) = computeExpectedTokensIn(zeroForOne ? token0 : token1, tokensOut, slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
-			amount0 = zeroForOne ? int256(tokensIn) : amountSpecified;
-			amount1 = zeroForOne ? amountSpecified : int256(tokensIn);
+			(tokensIn, tokensOut, newSqrtPriceX96) = computeExpectedTokensIn(zeroForOne ? token0 : token1, tokensOut, slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
+			amount0 = zeroForOne ? int256(tokensIn) : -int256(tokensOut);
+			amount1 = zeroForOne ? -int256(tokensOut) : int256(tokensIn);
 		}
 
 		// Update price data and write an oracle entry if the tick changed
