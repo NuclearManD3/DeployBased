@@ -60,7 +60,7 @@ contract DeployBasedPoolFactory is IDeployBasedPoolFactory, Ownable {
 		revert();
 	}
 
-	function createPool(address reserve, address launch, uint24 fee, uint96 priceMultiple, uint160 sqrtPriceX96, uint96 curveLimit, uint128 reserveOffset, uint128 amount)
+	function createPool(address reserve, address launch, uint24 fee, uint96 priceMultiple, uint160 sqrtPriceX96, uint96 curveLimit, uint128 reserveOffset, uint128 amount, address newOwner)
 		external returns (address pool)
 	{
 		LaunchPoolInitParams memory initParams = LaunchPoolInitParams(
@@ -73,22 +73,14 @@ contract DeployBasedPoolFactory is IDeployBasedPoolFactory, Ownable {
 		);
 		pool = deploy(reserve, launch, fee, initParams);
 		require(IERC20(launch).transferFrom(msg.sender, pool, amount));
-	}
-
-	function setOwner(address _owner) external onlyOwner {
-		emit OwnerChanged(owner(), _owner);
-		_transferOwnership(_owner);
+		DeployBasedLaunchPoolSimple(pool).transferOwnership(newOwner);
 	}
 
 	function owner() public override(IDeployBasedPoolFactory, Ownable) view returns (address) {
 		return Ownable.owner();
 	}
 
-	function enableFeeAmount(uint24 fee, int24 tickSpacing) external onlyOwner {
-	}
-
-	function setLendingPoolFor(address token, address pool) external onlyOwner {
-		lendingPools[token] = pool;
+	function enableFeeAmount(uint24 fee, int24 tickSpacing) external /*onlyOwner*/ {
 	}
 
 	function deploy(address reserve, address launch, uint24 fee, LaunchPoolInitParams memory initParams) internal returns (address pool) {
