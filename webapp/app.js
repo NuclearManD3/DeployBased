@@ -12,9 +12,36 @@ const rpcUrls = {
 };
 const usdcAddresses = {
     mainnet: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
-    testnet: '0x036CbD53842c5426634e7929541eC2318f3dcBB2' // Example, replace if needed
+    testnet: '0xREPLACE_USDC_TESTNET'
 };
+const factoryAddresses = {
+    mainnet: '0x13f92684Ac881b81fb5953951072B82700AE9e7d',
+    testnet: '0xREPLACE_FACTORY_TESTNET'
+};
+
+const factoryAbi = [
+    'function totalTokens() view returns (uint256)',
+    'function tokens(uint256) view returns (address)'
+];
+
+const erc20ReadAbi = [
+    'function name() view returns (string)',
+    'function symbol() view returns (string)',
+    'function decimals() view returns (uint8)'
+];
+
+const MAX_TOKENS_FETCH = 200; // safety cap to avoid huge loops
+// ----------------------------------------------------------------
+
 let currentNetwork = 'mainnet';
+
+// simple in-memory cache to avoid repeated RPC calls
+const tokenCache = {
+    network: null,
+    ts: 0,
+    ttl: 60 * 1000, // 60s cache
+    tokens: []
+};
 
 // Wallet connection logic
 async function connectWallet() {
@@ -191,37 +218,173 @@ if (window.ethereum) {
     });
 }
 
+
+// Fetch from API or chain, placeholder data
+// Use connected wallet provider for eth_call when possible (falls back to RPC URL)
+async function getReadProvider() {
+	if (provider) return provider;
+	// fallback readonly provider (kept as last resort)
+	return new ethers.providers.JsonRpcProvider(rpcUrls[currentNetwork]);
+}
+
+async function fetchTokensFromFactory() {
+	// use cache
+	if (tokenCache.network === currentNetwork && (Date.now() - tokenCache.ts) < tokenCache.ttl) {
+		return tokenCache.tokens;
+	}
+
+	const readProvider = await getReadProvider();
+	const factoryAddress = factoryAddresses[currentNetwork];
+	if (!factoryAddress || factoryAddress === '0xREPLACE_FACTORY_MAINNET' || factoryAddress === '0xREPLACE_FACTORY_TESTNET') {
+		// no factory configured; return empty to avoid RPC spam
+		return [];
+	}
+
+	const factory = new ethers.Contract(factoryAddress, factoryAbi, readProvider);
+	let total = 0;
+	try {
+		const totalBN = await factory.totalTokens();
+		total = Math.min(totalBN.toNumber(), MAX_TOKENS_FETCH);
+	} catch (err) {
+		console.error('Failed to read totalTokens()', err);
+		return [];
+	}
+
+	const out = [];
+	// SERIAL fetch to avoid spamming RPC with parallel calls
+	for (let i = 0; i < total; i++) {
+		try {
+			const tokenAddr = await factory.tokens(i);
+			// read name/symbol/decimals with sequential calls
+			const tokenContract = new ethers.Contract(tokenAddr, erc20ReadAbi, readProvider);
+			let name = 'Unknown';
+			let symbol = '';
+			let decimals = 18;
+			try { name = await tokenContract.name(); } catch (e) { /* ignore */ }
+			try { symbol = await tokenContract.symbol(); } catch (e) { /* ignore */ }
+			try { decimals = await tokenContract.decimals(); } catch (e) { /* ignore */ }
+			out.push({ address: tokenAddr, name, symbol, decimals: Number(decimals) });
+		} catch (err) {
+			console.warn('Failed to fetch token at index', i, err);
+			// continue quietly; don't abort the whole loop
+		}
+	}
+
+	// update cache
+	tokenCache.network = currentNetwork;
+	tokenCache.ts = Date.now();
+	tokenCache.tokens = out;
+	return out;
+}
+
+let renderTokenListLock = false;
+async function renderTokenList() {
+	if (renderTokenListLock)
+		return;
+	renderTokenListLock = true;
+	showSpinner(true);
+	const tokenList = document.getElementById('token-list');
+	tokenList.innerHTML = '';
+	const tokensFromChain = await fetchTokensFromFactory();
+	if (!tokensFromChain.length) {
+		tokenList.innerHTML = '<div class="token-item">No tokens found (or factory not configured)</div>';
+	} else {
+		tokensFromChain.forEach(token => {
+			const item = document.createElement('div');
+			item.classList.add('token-item');
+			const label = token.name || token.symbol || token.address;
+			const sym = token.symbol || '';
+			item.innerHTML = `<a href="token.html?address=${token.address}&symbol=${encodeURIComponent(sym)}">${label} ${sym ? `(${sym})` : ''}</a>`;
+			tokenList.appendChild(item);
+		});
+	}
+	showSpinner(false);
+	renderTokenListLock = false;
+}
+
 // Page-specific logic
 async function loadData() {
     const path = window.location.pathname;
     if (path.endsWith('index.html') || path === '/' || path === '') {
-        // Load token list from MongoDB/API, placeholder
-        const tokenList = document.getElementById('token-list');
-        tokenList.innerHTML = '';
-        // Fetch from API or chain, placeholder data
-        const tokens = [{name: 'Token1', symbol: 'TK1'}, {name: 'Token2', symbol: 'TK2'}]; // Replace with real fetch, e.g., fetch('/api/tokens')
-        tokens.forEach(token => {
-            const item = document.createElement('div');
-            item.classList.add('token-item');
-            item.innerHTML = `<a href="token.html?symbol=${token.symbol}">${token.name} (${token.symbol})</a>`;
-            tokenList.appendChild(item);
-        });
+		await renderTokenList();
     } else if (path.endsWith('about.html')) {
-        // Total tokens, placeholder
-        document.getElementById('total-tokens').innerText = '42'; // Fetch from API/chain
-    } else if (path.endsWith('mytokens.html')) {
-        if (!account) return;
-        const myTokenList = document.getElementById('my-token-list');
-        myTokenList.innerHTML = '';
-        // Fetch owned tokens from chain/Mongo, placeholder
-        const tokens = [{name: 'MyToken', fees: '10 USDC'}];
-        tokens.forEach(token => {
-            const item = document.createElement('div');
-            item.classList.add('token-item');
-            item.innerHTML = `${token.name} - Fees: ${token.fees} <button onclick="collectFees('${token.name}')">Collect</button>`;
-            myTokenList.appendChild(item);
-        });
-    } else if (path.endsWith('deploy.html')) {
+		const totalTokensElem = document.getElementById('total-tokens');
+		if (!totalTokensElem) return;
+
+		try {
+			const readProvider = await getReadProvider();
+			const factoryAddress = factoryAddresses[currentNetwork];
+			if (!factoryAddress) return;
+			const factory = new ethers.Contract(factoryAddress, factoryAbi, readProvider);
+			const total = await factory.totalTokens();
+			totalTokensElem.innerText = total.toString();
+		} catch (err) {
+			console.warn('Failed to fetch total token count:', err);
+			totalTokensElem.innerText = '?';
+		}
+
+	} else if (path.endsWith('mytokens.html')) {
+		if (!account) return;
+		const myTokenList = document.getElementById('my-token-list');
+		if (!myTokenList) return;
+		myTokenList.innerHTML = '';
+		showSpinner(true);
+
+		try {
+			const readProvider = await getReadProvider();
+			const factoryAddress = factoryAddresses[currentNetwork];
+			if (!factoryAddress) {
+				myTokenList.innerHTML = '<div class="token-item">Factory not configured.</div>';
+				return;
+			}
+
+			const factory = new ethers.Contract(factoryAddress, factoryAbi, readProvider);
+			const totalBN = await factory.totalTokens();
+			const total = Math.min(totalBN.toNumber(), MAX_TOKENS_FETCH);
+			const owned = [];
+
+			for (let i = 0; i < total; i++) {
+				const addr = await factory.tokens(i);
+				const tokenContract = new ethers.Contract(addr, [
+					...erc20ReadAbi,
+					'function owner() view returns (address)'
+				], readProvider);
+
+				let symbol = '', name = '', ownerAddr = '';
+				try { symbol = await tokenContract.symbol(); } catch {}
+				try { name = await tokenContract.name(); } catch {}
+				try { ownerAddr = await tokenContract.owner(); } catch {}
+
+				if (ownerAddr.toLowerCase() === account.toLowerCase()) {
+					owned.push({
+						address: addr,
+						name: name || symbol || 'Unknown',
+						symbol
+					});
+				}
+			}
+
+			if (!owned.length) {
+				myTokenList.innerHTML = '<div class="token-item">You do not own any tokens.</div>';
+			} else {
+				owned.forEach(tok => {
+					const item = document.createElement('div');
+					item.classList.add('token-item');
+					item.innerHTML = `
+						${tok.name} (${tok.symbol})<br>
+						<button onclick="collectFees('${tok.address}')">Collect Fees</button>
+					`;
+					myTokenList.appendChild(item);
+				});
+			}
+
+		} catch (err) {
+			console.error('Error loading my tokens:', err);
+			myTokenList.innerHTML = '<div class="token-item">Error fetching your tokens.</div>';
+		} finally {
+			showSpinner(false);
+		}
+	} else if (path.endsWith('deploy.html')) {
         // Sliders update
         document.getElementById('initial-market-cap').addEventListener('input', (e) => {
             document.getElementById('initial-market-cap-value').innerText = e.target.value;
@@ -257,30 +420,69 @@ async function loadData() {
             }
         });
     } else if (path.endsWith('token.html')) {
-        // Load token details from query param
-        const params = new URLSearchParams(window.location.search);
-        const symbol = params.get('symbol');
-        if (symbol) {
-            document.getElementById('token-name').innerText = `${symbol} Token`;
-            // Load more details via API or chain
-        }
-        document.getElementById('buy-token').addEventListener('click', async () => {
-            if (!signer) {
-                showError('Connect wallet first');
-                return;
-            }
-            showSpinner(true);
-            try {
-                // Call buy function
-                const tx = await buyToken(/* params including symbol */);
-                await tx.wait();
-            } catch (err) {
-                showError(err.message);
-            } finally {
-                showSpinner(false);
-            }
-        });
-    }
+		const params = new URLSearchParams(window.location.search);
+		const tokenAddress = params.get('address');
+		if (!tokenAddress) return;
+
+		const tokenNameElem = document.getElementById('token-name');
+		const tokenDetailsElem = document.getElementById('token-details');
+
+		tokenNameElem.innerText = 'Loading...';
+		tokenDetailsElem.innerHTML = '';
+		showSpinner(true);
+
+		try {
+			const readProvider = await getReadProvider();
+			const tokenContract = new ethers.Contract(tokenAddress, [
+				'function name() view returns (string)',
+				'function symbol() view returns (string)',
+				'function decimals() view returns (uint8)',
+				'function totalSupply() view returns (uint256)',
+				'function owner() view returns (address)'
+			], readProvider);
+
+			const [name, symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
+				tokenContract.name(),
+				tokenContract.symbol(),
+				tokenContract.decimals(),
+				tokenContract.totalSupply(),
+				tokenContract.owner()
+			]);
+
+			tokenNameElem.innerText = `${symbol} Token`;
+			tokenDetailsElem.innerHTML = `
+				<p><strong>Name:</strong> ${name}</p>
+				<p><strong>Symbol:</strong> ${symbol}</p>
+				<p><strong>Decimals:</strong> ${decimals}</p>
+				<p><strong>Total Supply:</strong> ${ethers.utils.formatUnits(totalSupply, decimals)}</p>
+				<p><strong>Owner:</strong> ${ownerAddr}</p>
+			`;
+
+			document.getElementById('buy-token').addEventListener('click', async () => {
+				if (!signer) {
+					showError('Connect wallet first');
+					return;
+				}
+				showSpinner(true);
+				try {
+					const tx = await buyToken(tokenAddress);
+					await tx.wait();
+					showError('Purchase successful!');
+				} catch (err) {
+					showError(err.message);
+				} finally {
+					showSpinner(false);
+				}
+			});
+
+		} catch (err) {
+			console.error('Error loading token:', err);
+			tokenNameElem.innerText = 'Error';
+			tokenDetailsElem.innerHTML = 'Could not fetch token info.';
+		} finally {
+			showSpinner(false);
+		}
+	}
 }
 
 async function collectFees(tokenName) {
