@@ -25,6 +25,8 @@ interface IDeployBasedPoolFactory {
 		address pool
 	);
 
+	event OwnerChanged(address indexed oldOwner, address indexed newOwner);
+
 	/// @notice Returns the current owner of the factory
 	/// @dev Can be changed by the current owner via setOwner
 	/// @return The address of the factory owner

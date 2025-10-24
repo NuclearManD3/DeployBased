@@ -64,7 +64,7 @@ struct LaunchPoolInitParams {
 /// complexity and I am trying to build a prototype quickly.
 
 
-contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
+contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 	address public immutable reserve;
 	address public immutable launch;
 	ICompoundV3Pool public immutable lendingPool;
