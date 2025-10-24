@@ -74,7 +74,7 @@ abstract contract UniswapV3PoolEmulator {
 	Oracle.Observation[65535] public /*override*/ observations;
 
 	constructor(uint160 sqrtPriceX96, address _factory, address _token0, address _token1, uint24 _fee) {
-		if (token0 < token1)
+		if (_token0 < _token1)
 			(factory, token0, token1, fee) = (_factory, _token0, _token1, _fee);
 		else
 			(factory, token0, token1, fee) = (_factory, _token1, _token0, _fee);
