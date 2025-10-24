@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.17;
 
 
@@ -15,6 +15,7 @@ import "../interfaces/IERC20.sol";
 
 import "../libs/Math.sol";
 import "../libs/UniswapV3Lib.sol";
+import "../libs/AMMCurve.sol";
 
 import "../abstract/UniswapV3PoolEmulator.sol";
 import "../abstract/ownable.sol";
@@ -150,11 +151,14 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 	***
 	**/
 
-	function computeExpectedTokensOut(address inputToken, uint256 tokensIn, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensInActual, uint256 tokensOut, uint160 newSqrtPriceX96) {
-		uint256 tokensRemaining = tokensIn;
-		(uint128 reserve0, uint128 reserve1) = reserves();
-		uint256 x0 = uint256(poolPolarity ? reserve0 : reserve1);
-		uint256 y0 = uint256(poolPolarity ? reserve1 : reserve0);
+	function computeExpectedTokensOut(address inputToken, uint256 maxTokensIn, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensIn, uint256 tokensOut, uint160 newSqrtPriceX96) {
+		uint256 x0;
+		uint256 y0;
+		{
+			(uint128 reserve0, uint128 reserve1) = reserves();
+			x0 = uint256(poolPolarity ? reserve0 : reserve1);
+			y0 = uint256(poolPolarity ? reserve1 : reserve0);
+		}
 
 		// Convert sqrtPriceX96 and sqrtPriceLimitX96 to 128.128 encoding
 		uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
@@ -166,66 +170,52 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 		if (inputToken == reserve) {
 			// Purchasing launch tokens - price will go from initial curve to xyk curve
 
-			if (x0 < curveLimit) {
-				// Purchasing launch tokens - price will go from initial curve to xyk curve
-				uint256 M = priceMultiple / curveLimit;
+			if (x0 < curveLimit)
+				(tokensIn, tokensOut, newPrice) = AMMCurvePMx.computeBuyTokensOut(maxTokensIn, priceMultiple, curveLimit, x0, priceLimit, lastPrice);
+			else
+				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
 
-				// Check if swap stays within initial curve
-				uint256 tokensInTmp = tokensIn;
-				if (x0 + tokensInTmp > curveLimit)
-					// Go to the maximum number of input tokens for this part of the curve
-					tokensInTmp = curveLimit - x0;
-
-				// Compute dy = dx / (lastPrice + M * dx / 2)
-				uint256 denominator = lastPrice + ((M * tokensInTmp) >> 1);
-				tokensOut = Math.mulDiv(tokensInTmp, 0x100000000000000000000000000000000, denominator);
-
-				// Calculate new price: P = lastPrice + M * dx
-				newPrice = lastPrice + M * tokensInTmp;
-
-				if (newPrice > priceLimit)
-					// Price exceeds limit, compute at price limit
-					// We also specify here that no more tokens remain for swapping, since the price limit was reached
-					(tokensOut, newPrice, tokensRemaining) = (, priceLimit, 0);
-				else
-					// Compute the number of unconverted tokens
-					tokensRemaining -= tokensInTmp;
-			} else
-				tokensIn = 0;
-
-			if (tokensRemaining > 0) {
-				// Compute for (x + b)y = k
-				//   vx = x + b (virtual liquidity x)
-				//   b = curveLimit
-				uint256 vx = uint256(x0 + curveLimit);
-				uint256 K = vx * uint256(y0);
-				uint256 y1 = y0 - tokensOut;
-				uint256 tokensInTmp = (K / y1) - vx;
-				newPrice = Math.mulDiv(0x100000000000000000000000000000000, vx + tokensInTmp, y1);
-
-				if (newPrice > priceLimit) {
-					// Price exceeds limit, compute at price limit
-					// tokensRemaining doesn't need to be set because it is not checked again
-					//   priceLimit = (vx + tokensInTmp) / y1
-					//   y1 = K / (vx + tokensInTmp)
-					//   priceLimit * y1 = (vx + tokensInTmp)^2
-					//   tokensInTmp = sqrt(priceLimit * y1) - vx
-					newPrice = priceLimit;
-					tokensInTmp = Math.sqrt(Math.mulDiv(priceLimit, y1, 0x100000000000000000000000000000000)) - vx;
-				}
-
-				tokensIn += tokensInTmp;
+			if (maxTokensIn > tokensIn && newPrice < priceLimit) {
+				uint256 remainingIn = maxTokensIn - tokensIn;
+				uint256 newX = x0 + tokensIn;
+				uint256 newY = y0 - tokensOut;
+				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensOut(remainingIn, curveLimit, newX, newY, priceLimit);
+				tokensIn += tokensInNext;
+				tokensOut += tokensOutNext;
+				newPrice = nextPrice;
 			}
 		} else {
 			// Selling launch tokens - price will go from xyk curve to initial curve
+
+			if (x0 > curveLimit)
+				(tokensIn, tokensOut, newPrice) = AMMCurveKxby.computeSellTokensOut(maxTokensIn, curveLimit, x0, y0, priceLimit);
+			else
+				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
+
+			if (maxTokensIn > tokensIn && newPrice > priceLimit) {
+				uint256 remainingIn = maxTokensIn - tokensIn;
+				uint256 newX = x0 - tokensOut;
+				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurvePMx.computeSellTokensOut(remainingIn, priceMultiple, curveLimit, newX, priceLimit, newPrice);
+				tokensIn += tokensInNext;
+				tokensOut += tokensOutNext;
+				newPrice = nextPrice;
+			}
 		}
+
+		// Convert to sqrtPriceX96
+		newSqrtPriceX96 = uint160(Math.sqrt(newPrice) << 32);
+		if (!poolPolarity)
+			newSqrtPriceX96 = uint160(uint256(0x1000000000000000000000000000000000000000000000000) / uint256(newSqrtPriceX96));
 	}
 
-	function computeExpectedTokensIn(address inputToken, uint256 tokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensIn, uint256 tokensOutActual, uint160 newSqrtPriceX96) {
-		uint256 tokensRemaining = tokensOut;
-		(uint128 reserve0, uint128 reserve1) = reserves();
-		uint256 x0 = uint256(poolPolarity ? reserve0 : reserve1);
-		uint256 y0 = uint256(poolPolarity ? reserve1 : reserve0);
+	function computeExpectedTokensIn(address inputToken, uint256 maxTokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensIn, uint256 tokensOut, uint160 newSqrtPriceX96) {
+		uint256 x0;
+		uint256 y0;
+		{
+			(uint128 reserve0, uint128 reserve1) = reserves();
+			x0 = uint256(poolPolarity ? reserve0 : reserve1);
+			y0 = uint256(poolPolarity ? reserve1 : reserve0);
+		}
 
 		// Convert sqrtPriceX96 and sqrtPriceLimitX96 to 128.128 encoding
 		uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
@@ -235,72 +225,44 @@ contract DeployBasedLaunchPool is UniswapV3PoolEmulator, Ownable {
 
 		uint256 newPrice;
 		if (inputToken == reserve) {
-			require(y0 > tokensOut, "IL");
+			// Purchasing launch tokens - price will go from initial curve to xyk curve
 
-			if (x0 < curveLimit) {
-				// Purchasing launch tokens - price will go from initial curve to xyk curve
-				uint256 M = priceMultiple / curveLimit;
+			if (x0 < curveLimit)
+				(tokensIn, tokensOut, newPrice) = AMMCurvePMx.computeBuyTokensIn(maxTokensOut, priceMultiple, curveLimit, x0, priceLimit, lastPrice);
+			else
+				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
 
-				// Compute dx = dy * lastPrice / (1 - M * dy / 2)
-				uint256 denominator = 0x100000000000000000000000000000000 - ((M * tokensRemaining) >> 1);
-				tokensIn = Math.mulDiv(tokensRemaining, lastPrice, denominator);
-
-				// Check if swap stays within initial curve
-				if (x0 + tokensIn > curveLimit)
-					// Go to the maximum number of input tokens for this part of the curve
-					tokensIn = curveLimit - x0;
-
-				// Calculate new price: P = lastPrice + M * dx
-				newPrice = lastPrice + M * tokensIn;
-
-				if (newPrice > priceLimit)
-					// Price exceeds limit, compute at price limit
-					// We also specify here that no more tokens remain for swapping, since the price limit was reached
-					(tokensIn, newPrice, tokensRemaining) = ((priceLimit - lastPrice) / M, priceLimit, 0);
-				else {
-					// dy = dx / (lastPrice + M * dx / 2)
-					uint256 tokensOutTmp = Math.mulDiv(tokensIn, 0x100000000000000000000000000000000, lastPrice + ((M * tokensIn) >> 1));
-
-					// Compute the number of unconverted tokens
-					tokensRemaining = tokensOutTmp < tokensRemaining ? tokensRemaining - tokensOutTmp : 0;
-				}
-			} else
-				tokensIn = 0;
-
-			if (tokensRemaining > 0) {
-				// Compute for (x + b)y = k
-				//   vx = x + b (virtual liquidity x)
-				// Note that x now must also contain the tokens 
-				uint256 vx = uint256(x0 + b + tokensIn);
-				uint256 K = vx * uint256(y0);
-				uint256 y1 = y0 - tokensOut;
-				uint256 tokensInTmp = (K / y1) - vx;
-				newPrice = Math.mulDiv(0x100000000000000000000000000000000, vx + tokensInTmp, y1);
-
-				if (newPrice > priceLimit) {
-					// Price exceeds limit, compute at price limit
-					// tokensRemaining doesn't need to be set because it is not checked again
-					//   priceLimit = (vx + tokensInTmp) / y1
-					//   y1 = K / (vx + tokensInTmp)
-					//   priceLimit * y1 = (vx + tokensInTmp)^2
-					//   tokensInTmp = sqrt(priceLimit * y1) - vx
-					newPrice = priceLimit;
-					tokensInTmp = Math.sqrt(Math.mulDiv(priceLimit, y1, 0x100000000000000000000000000000000)) - vx;
-				}
-
-				tokensIn += tokensInTmp;
+			if (maxTokensOut > tokensOut && newPrice < priceLimit) {
+				uint256 remainingOut = maxTokensOut - tokensOut;
+				uint256 newX = x0 + tokensIn;
+				uint256 newY = y0 - tokensOut;
+				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensIn(remainingOut, curveLimit, newX, newY, priceLimit);
+				tokensIn += tokensInNext;
+				tokensOut += tokensOutNext;
+				newPrice = nextPrice;
 			}
 		} else {
 			// Selling launch tokens - price will go from xyk curve to initial curve
-			if (x0 > curveLimit) {
 
+			if (x0 > curveLimit)
+				(tokensIn, tokensOut, newPrice) = AMMCurveKxby.computeSellTokensIn(maxTokensOut, curveLimit, x0, y0, priceLimit);
+			else
+				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
+
+			if (maxTokensOut > tokensOut && newPrice > priceLimit) {
+				uint256 remainingOut = maxTokensOut - tokensOut;
+				uint256 newX = x0 - tokensOut;
+				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurvePMx.computeSellTokensIn(remainingOut, priceMultiple, curveLimit, newX, priceLimit, newPrice);
+				tokensIn += tokensInNext;
+				tokensOut += tokensOutNext;
+				newPrice = nextPrice;
 			}
 		}
 
 		// Convert to sqrtPriceX96
-		newSqrtPriceX96 = uint160(Math.sqrt(newPrice) * (1 << 96));
+		newSqrtPriceX96 = uint160(Math.sqrt(newPrice) << 32);
 		if (!poolPolarity)
-			newSqrtPriceX96 = 0x100000000000000000000000000000000 / newSqrtPriceX96;
+			newSqrtPriceX96 = uint160(uint256(0x1000000000000000000000000000000000000000000000000) / uint256(newSqrtPriceX96));
 	}
 
 	function payTokensToSwapper(address token, uint256 amount, address recipient) internal override {
