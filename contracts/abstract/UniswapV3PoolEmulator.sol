@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL 1.1
 pragma solidity ^0.8.17;
 
 import "../interfaces/IERC20.sol";
@@ -268,47 +268,47 @@ abstract contract UniswapV3PoolEmulator {
 			'SPL'
 		);
 
-		Slot0Modified memory slot0Start = slot0;
-		bool exactInput = amountSpecified > 0;
-
 		uint256 tokensOut;
 		uint256 tokensIn;
-
-		// Compute swap rates
 		uint160 newSqrtPriceX96;
-		if (exactInput) {
-			tokensIn = uint256(amountSpecified);
-			(tokensIn, tokensOut, newSqrtPriceX96) = computeExpectedTokensOut(zeroForOne ? token0 : token1, tokensIn, slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
-			amount0 = zeroForOne ? int256(tokensIn) : -int256(tokensOut);
-			amount1 = zeroForOne ? -int256(tokensOut) : int256(tokensIn);
-		} else {
-			tokensOut = uint256(-amountSpecified);
-			(tokensIn, tokensOut, newSqrtPriceX96) = computeExpectedTokensIn(zeroForOne ? token0 : token1, tokensOut, slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
-			amount0 = zeroForOne ? int256(tokensIn) : -int256(tokensOut);
-			amount1 = zeroForOne ? -int256(tokensOut) : int256(tokensIn);
+		int24 newTick;
+
+		{
+			Slot0Modified memory slot0Start = slot0;
+
+			// Compute swap rates while considering fees
+			if (amountSpecified > 0) {
+				(tokensIn, tokensOut, newSqrtPriceX96) = computeExpectedTokensOut(zeroForOne ? token0 : token1, uint256(amountSpecified), slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
+				tokensOut = Math.mulDiv(tokensOut, 1e6 - fee, 1e6);
+			} else {
+				(tokensIn, tokensOut, newSqrtPriceX96) = computeExpectedTokensIn(zeroForOne ? token0 : token1, uint256(-amountSpecified), slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
+				tokensIn = Math.mulDiv(tokensIn, 1e6, 1e6 - fee);
+			}
+
+			// Update price data and write an oracle entry if the tick changed
+			newTick = TickMath.getTickAtSqrtRatio(newSqrtPriceX96);
+			if (newTick != slot0Start.tick) {
+				(uint16 observationIndex, uint16 observationCardinality) = observations.write(
+					slot0Start.observationIndex,
+					_blockTimestamp(),
+					slot0Start.tick,
+					liquidity(),
+					slot0Start.observationCardinality,
+					slot0Start.observationCardinalityNext
+				);
+				(slot0.sqrtPriceX96, slot0.tick, slot0.observationIndex, slot0.observationCardinality) = (
+					newSqrtPriceX96,
+					newTick,
+					observationIndex,
+					observationCardinality
+				);
+			} else
+				// otherwise just update the price
+				slot0.sqrtPriceX96 = newSqrtPriceX96;
 		}
 
-		// Update price data and write an oracle entry if the tick changed
-		int24 newTick = TickMath.getTickAtSqrtRatio(newSqrtPriceX96);
-		if (newTick != slot0Start.tick) {
-			(uint16 observationIndex, uint16 observationCardinality) = observations.write(
-				slot0Start.observationIndex,
-				_blockTimestamp(),
-				slot0Start.tick,
-				liquidity(),
-				slot0Start.observationCardinality,
-				slot0Start.observationCardinalityNext
-			);
-			(slot0.sqrtPriceX96, slot0.tick, slot0.observationIndex, slot0.observationCardinality) = (
-				newSqrtPriceX96,
-				newTick,
-				observationIndex,
-				observationCardinality
-			);
-		} else
-			// otherwise just update the price
-			slot0.sqrtPriceX96 = newSqrtPriceX96;
-
+		amount0 = zeroForOne ? int256(tokensIn) : -int256(tokensOut);
+		amount1 = zeroForOne ? -int256(tokensOut) : int256(tokensIn);
 		// Perform the swap
 		uint256 balanceBefore = balance(zeroForOne ? token0 : token1);
 		payTokensToSwapper(zeroForOne ? token1 : token0, tokensOut, recipient);
@@ -318,6 +318,7 @@ abstract contract UniswapV3PoolEmulator {
 
 		// Accept the received tokens
 		acceptTokensFromSwapper(zeroForOne ? token0 : token1, balanceAfter - balanceBefore);
+		//_swapExchangeRaw(zeroForOne, tokensIn, tokensOut, amount0, amount1, recipient, data);
 
 		// Event
 		emit Swap(msg.sender, recipient, amount0, amount1, newSqrtPriceX96, liquidity(), newTick);
