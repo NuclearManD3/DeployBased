@@ -12,7 +12,7 @@ contract DeployBasedPoolFactoryProxy is Ownable {
 
 	function implementation() public view returns (address impl) {
 		assembly {
-			impl := sload(0x100071)
+			impl := sload(0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc)
 		}
 	}
 
@@ -27,7 +27,7 @@ contract DeployBasedPoolFactoryProxy is Ownable {
 		lendingPools[0x4200000000000000000000000000000000000006] = 0x46e6b214b524310239732D51387075E0e70970bf;
 
 		assembly {
-			sstore(0x100071, impl)
+			sstore(0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, impl)
 		}
 
 		emit ImplementationChanged(impl);
@@ -36,7 +36,7 @@ contract DeployBasedPoolFactoryProxy is Ownable {
 	fallback() external payable {
 		assembly {
 			calldatacopy(0, 0, calldatasize())
-			let result := delegatecall(gas(), sload(0x100071), 0, calldatasize(), 0, 0)
+			let result := delegatecall(gas(), sload(0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc), 0, calldatasize(), 0, 0)
 			returndatacopy(0, 0, returndatasize())
 			switch result
 			case 0 {
@@ -63,7 +63,7 @@ contract DeployBasedPoolFactoryProxy is Ownable {
 
 	function setImplementation(address impl) public onlyOwner {
 		assembly {
-			sstore(0x100071, impl)
+			sstore(0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, impl)
 		}
 
 		emit ImplementationChanged(impl);
