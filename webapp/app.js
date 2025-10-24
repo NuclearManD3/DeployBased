@@ -399,12 +399,101 @@ async function loadData() {
 		const liquidityInput = document.getElementById('liquidity-assistance');
 		const purchaseInput = document.getElementById('tokens-to-purchase');
 
-		marketCapInput.addEventListener('input', (e) => {
-			document.getElementById('initial-market-cap-value').innerText = e.target.value;
+		// Reserve token change
+		const reserveSelect = document.getElementById('reserve-token');
+		reserveSelect.addEventListener('change', (e) => {
+			const liqInput = document.getElementById('liquidity-assistance');
+			if (e.target.value === 'WETH') {
+				liqInput.value = '2';
+			} else {
+				liqInput.value = '10000';
+			}
 		});
-		liquidityInput.addEventListener('input', (e) => {
-			document.getElementById('liquidity-assistance-value').innerText = `${e.target.value}%`;
+
+		// Interdependent fields logic
+		const startingPrice = document.getElementById('starting-price');
+		const totalSupply = document.getElementById('total-supply');
+		const marketCap = document.getElementById('initial-market-cap');
+		const transitionPrice = document.getElementById('transition-price');
+		const linearLimit = document.getElementById('liquidity-assistance');
+
+		// Store initial ratios
+		let transitionRatio = parseFloat(transitionPrice.value) / parseFloat(startingPrice.value);
+		let linearRatio = parseFloat(linearLimit.value) / parseFloat(marketCap.value);
+
+		// Utility: scale all dependent fields proportionally
+		function scaleAllFields(scaleFactor, updated) {
+			const oldPrice = parseFloat(startingPrice.value);
+			const oldCap = parseFloat(marketCap.value);
+
+			// Scale starting price and total supply proportionally
+			const newPrice = oldPrice * scaleFactor;
+			const newSupply = (oldCap / newPrice).toFixed(6); // preserve mcap invariant
+
+			if (startingPrice != updated) startingPrice.value = newPrice.toFixed(6);
+			if (totalSupply != updated) totalSupply.value = newSupply;
+
+			// Maintain invariant
+			const newCap = (newPrice * newSupply).toFixed(2);
+			if (marketCap != updated) marketCap.value = newCap;
+
+			// Scale proportional fields
+			transitionPrice.value = (newPrice * transitionRatio).toFixed(6);
+			linearLimit.value = (newCap * linearRatio).toFixed(0);
+		}
+
+		// Event listeners
+		startingPrice.addEventListener('input', () => {
+			const oldPrice = parseFloat(startingPrice.dataset.prev || startingPrice.value);
+			const newPrice = parseFloat(startingPrice.value);
+			if (!isNaN(oldPrice) && !isNaN(newPrice)) {
+				const scaleFactor = newPrice / oldPrice;
+				scaleAllFields(scaleFactor, startingPrice);
+				startingPrice.dataset.prev = newPrice;
+			}
 		});
+
+		totalSupply.addEventListener('input', () => {
+			const oldSupply = parseFloat(totalSupply.dataset.prev || totalSupply.value);
+			const newSupply = parseFloat(totalSupply.value);
+			if (!isNaN(oldSupply) && !isNaN(newSupply)) {
+				const scaleFactor = newSupply / oldSupply;
+				scaleAllFields(scaleFactor, totalSupply);
+				totalSupply.dataset.prev = newSupply;
+			}
+		});
+
+		marketCap.addEventListener('input', () => {
+			const oldCap = parseFloat(marketCap.dataset.prev || marketCap.value);
+			const newCap = parseFloat(marketCap.value);
+			if (!isNaN(oldCap) && !isNaN(newCap)) {
+				const scaleFactor = newCap / oldCap;
+				scaleAllFields(scaleFactor, marketCap);
+				marketCap.dataset.prev = newCap;
+			}
+		});
+
+		transitionPrice.addEventListener('input', () => {
+			const price = parseFloat(startingPrice.value);
+			const trans = parseFloat(transitionPrice.value);
+			if (!isNaN(price) && !isNaN(trans)) {
+				transitionRatio = trans / price;
+			}
+		});
+
+		linearLimit.addEventListener('input', () => {
+			const cap = parseFloat(marketCap.value);
+			const liq = parseFloat(linearLimit.value);
+			if (!isNaN(cap) && !isNaN(liq)) {
+				linearRatio = liq / cap;
+			}
+		});
+
+		// Initialize prev values
+		startingPrice.dataset.prev = startingPrice.value;
+		totalSupply.dataset.prev = totalSupply.value;
+		marketCap.dataset.prev = marketCap.value;
+
 		purchaseInput.addEventListener('input', (e) => {
 			document.getElementById('tokens-to-purchase-value').innerText = `${e.target.value}%`;
 		});
