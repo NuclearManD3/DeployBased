@@ -1,0 +1,86 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deploy Token - Deploy: Based</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <!-- Same header -->
+        <div class="logo">
+            <img src="logo_wide.png" alt="Deploy: Based Logo" id="logo-wide">
+            <img src="logo.png" alt="Deploy: Based Logo" id="logo-small" class="hidden">
+        </div>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="deploy.html">Deploy Token</a></li>
+                <li><a href="mytokens.html">My Tokens</a></li>
+                <li><a href="#docs">Docs</a></li>
+            </ul>
+        </nav>
+        <div class="wallet-section">
+            <select id="network-switch">
+                <option value="mainnet">Mainnet</option>
+                <option value="testnet">Testnet</option>
+            </select>
+            <button id="connect-wallet">Connect Wallet</button>
+            <div id="wallet-info" class="hidden">
+                <span id="usdc-balance"></span>
+                <button id="disconnect-wallet">Disconnect</button>
+            </div>
+        </div>
+    </header>
+    <main>
+        <h1>Deploy a New Token</h1>
+        <form id="deploy-form">
+            <label for="token-name">Token Name:</label>
+            <input type="text" id="token-name" required>
+
+            <label for="token-symbol">Token Symbol:</label>
+            <input type="text" id="token-symbol" required>
+
+            <label for="min-price">Min Starting Price:</label>
+            <input type="number" id="min-price" step="0.01" required>
+
+            <label for="reserve-token">Reserve Token:</label>
+            <select id="reserve-token">
+                <option value="USDC" selected>USDC</option>
+                <option value="USDS">USDS</option>
+                <option value="WETH">WETH</option>
+            </select>
+
+            <label for="decimals">Decimals (0-32):</label>
+            <input type="number" id="decimals" min="0" max="32" required>
+
+            <label for="total-supply">Total Supply:</label>
+            <input type="number" id="total-supply" required>
+
+            <label for="initial-market-cap">Initial Market Cap:</label>
+            <input type="range" id="initial-market-cap" min="1000" max="1000000" value="10000">
+            <span id="initial-market-cap-value">10000</span>
+
+            <label for="liquidity-assistance">Liquidity Assistance:</label>
+            <input type="range" id="liquidity-assistance" min="0" max="100" value="50">
+            <span id="liquidity-assistance-value">50%</span>
+
+            <label for="tokens-to-purchase">Tokens to Purchase Immediately (0-10%):</label>
+            <input type="range" id="tokens-to-purchase" min="0" max="10" value="0">
+            <span id="tokens-to-purchase-value">0%</span>
+
+            <button type="submit">Deploy Token</button>
+        </form>
+        <div id="error-message" class="hidden"></div>
+    </main>
+    <div id="loading-spinner" class="hidden">Loading...</div>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+    <script src="contracts.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
