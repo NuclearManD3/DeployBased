@@ -312,7 +312,10 @@ async function renderTokenList() {
 }
 
 // Page-specific logic
+let alreadyLoaded = false;
 async function loadData() {
+	if (alreadyLoaded) return;
+	alreadyLoaded = true;
 	const path = window.location.pathname;
 	if (path.endsWith('index.html') || path === '/' || path === '') {
 		await renderTokenList();
