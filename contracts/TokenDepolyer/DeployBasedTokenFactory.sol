@@ -32,13 +32,15 @@ contract DeployBasedTokenFactory is /*IDeployBasedTokenFactory,*/ Ownable {
 		token = address(new UniversalSafeERC20(name, symbol, decimals, address(this), amount));
 		IERC20(token).approve(_factory, amount);
 
-		uint96 priceMultiple = uint96(switchPrice - startPrice);
-		uint160 sqrtPriceX96 = uint160(token < reserve
-			? uint256(0x0010000000000000000000000000000000000000000) / Math.sqrt(startPrice)
-			: uint256(Math.sqrt(startPrice)) << 32);
+		{
+			uint96 priceMultiple = uint96(switchPrice - startPrice);
+			uint160 sqrtPriceX96 = uint160(token < reserve
+				? uint256(0x0010000000000000000000000000000000000000000) / Math.sqrt(startPrice)
+				: uint256(Math.sqrt(startPrice)) << 32);
 
-		pool = IDeployBasedPoolFactory(_factory).createPool(reserve, token, fee, priceMultiple, sqrtPriceX96, curveLimit, reserveOffset, amount, msg.sender);
-		Ownable(token).transferOwnership(msg.sender);
+			pool = IDeployBasedPoolFactory(_factory).createPool(reserve, token, fee, priceMultiple, sqrtPriceX96, curveLimit, reserveOffset, amount, msg.sender);
+			Ownable(token).transferOwnership(msg.sender);
+		}
 
 		unchecked {
 			uint256 counter = totalTokens;
