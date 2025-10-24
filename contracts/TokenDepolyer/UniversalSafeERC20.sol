@@ -22,11 +22,12 @@ contract UniversalSafeERC20 is BasicERC20, Ownable, ISafeERC20Callbacks {
 	address public immutable factory;
 	address public implementation;
 
-	constructor(string memory name, string memory symbol, uint8 decimals, address _factory)
+	constructor(string memory name, string memory symbol, uint8 decimals, address _factory, uint256 totalSupply)
 		BasicERC20(name, symbol, decimals)
 	{
 		factory = _factory;
 		implementation = address(0);
+		_mint(msg.sender, totalSupply);
 	}
 
 	/*
