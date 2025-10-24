@@ -169,7 +169,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		// Convert sqrtPriceX96 and sqrtPriceLimitX96 to 128.128 encoding
 		uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
 		uint256 priceLimit = Math.mulDiv(sqrtPriceLimitX96, sqrtPriceLimitX96, 0x10000000000000000 /* 1 << (192 - 128) */);
-		if (!poolPolarity)
+		if (poolPolarity)
 			(lastPrice, priceLimit) = (invertPrice128(lastPrice), invertPrice128(priceLimit));
 
 		uint256 newPrice;
@@ -185,7 +185,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 				uint256 remainingIn = maxTokensIn - tokensIn;
 				uint256 newX = x0 + tokensIn;
 				uint256 newY = y0 - tokensOut;
-				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensOut(remainingIn, curveLimit, newX, newY, priceLimit);
+				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensOut(remainingIn, reserveOffset, newX, newY, priceLimit);
 				tokensIn += tokensInNext;
 				tokensOut += tokensOutNext;
 				newPrice = nextPrice;
@@ -194,7 +194,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 			// Selling launch tokens - price will go from xyk curve to initial curve
 
 			if (x0 > curveLimit)
-				(tokensIn, tokensOut, newPrice) = AMMCurveKxby.computeSellTokensOut(maxTokensIn, curveLimit, x0, y0, priceLimit);
+				(tokensIn, tokensOut, newPrice) = AMMCurveKxby.computeSellTokensOut(maxTokensIn, reserveOffset, x0, y0, priceLimit);
 			else
 				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
 
@@ -210,7 +210,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 
 		// Convert to sqrtPriceX96
 		newSqrtPriceX96 = uint160(Math.sqrt(newPrice) << 32);
-		if (!poolPolarity)
+		if (poolPolarity)
 			newSqrtPriceX96 = uint160(uint256(0x1000000000000000000000000000000000000000000000000) / uint256(newSqrtPriceX96));
 	}
 
@@ -226,7 +226,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		// Convert sqrtPriceX96 and sqrtPriceLimitX96 to 128.128 encoding
 		uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
 		uint256 priceLimit = Math.mulDiv(sqrtPriceLimitX96, sqrtPriceLimitX96, 0x10000000000000000 /* 1 << (192 - 128) */);
-		if (!poolPolarity)
+		if (poolPolarity)
 			(lastPrice, priceLimit) = (invertPrice128(lastPrice), invertPrice128(priceLimit));
 
 		uint256 newPrice;
@@ -242,7 +242,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 				uint256 remainingOut = maxTokensOut - tokensOut;
 				uint256 newX = x0 + tokensIn;
 				uint256 newY = y0 - tokensOut;
-				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensIn(remainingOut, curveLimit, newX, newY, priceLimit);
+				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensIn(remainingOut, reserveOffset, newX, newY, priceLimit);
 				tokensIn += tokensInNext;
 				tokensOut += tokensOutNext;
 				newPrice = nextPrice;
@@ -251,7 +251,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 			// Selling launch tokens - price will go from xyk curve to initial curve
 
 			if (x0 > curveLimit)
-				(tokensIn, tokensOut, newPrice) = AMMCurveKxby.computeSellTokensIn(maxTokensOut, curveLimit, x0, y0, priceLimit);
+				(tokensIn, tokensOut, newPrice) = AMMCurveKxby.computeSellTokensIn(maxTokensOut, reserveOffset, x0, y0, priceLimit);
 			else
 				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
 
@@ -267,7 +267,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 
 		// Convert to sqrtPriceX96
 		newSqrtPriceX96 = uint160(Math.sqrt(newPrice) << 32);
-		if (!poolPolarity)
+		if (poolPolarity)
 			newSqrtPriceX96 = uint160(uint256(0x1000000000000000000000000000000000000000000000000) / uint256(newSqrtPriceX96));
 	}
 
