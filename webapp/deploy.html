@@ -10,7 +10,6 @@
 </head>
 <body>
     <header>
-        <!-- Same header -->
         <div class="logo">
             <img src="logo_wide.png" alt="Deploy: Based Logo" id="logo-wide">
             <img src="logo.png" alt="Deploy: Based Logo" id="logo-small" class="hidden">
@@ -72,15 +71,15 @@
                     </tr>
                     <tr>
                         <td><label for="total-supply">Total Supply:</label></td>
-                        <td><input type="number" id="total-supply" value="1000000000" required></td>
+                        <td><input type="number" id="total-supply" step="any" value="1000000000" required></td>
                     </tr>
                     <tr>
                         <td><label for="liquidity-assistance">Linear Limit:</label></td>
-                        <td><input type="number" id="liquidity-assistance" value="10000" required></td>
+                        <td><input type="number" id="liquidity-assistance" step="any" value="10000" required></td>
                     </tr>
                     <tr>
                         <td><label for="transition-price">Transition Price:</label></td>
-                        <td><input type="number" id="transition-price" value="0.000011" required></td>
+                        <td><input type="number" id="transition-price" step="any" value="0.000011" required></td>
                     </tr>
                 </table>
             </details>
@@ -93,81 +92,5 @@
     <script src="https://cdn.jsdelivr.net/npm/ethers@5/dist/ethers.umd.min.js"></script>
     <script src="contracts.js"></script>
     <script src="app.js"></script>
-    <script>
-        // Slider updates
-        document.getElementById('tokens-to-purchase').addEventListener('input', (e) => {
-            document.getElementById('tokens-to-purchase-value').innerText = `${e.target.value}%`;
-        });
-
-        // Reserve token change
-        const reserveSelect = document.getElementById('reserve-token');
-        reserveSelect.addEventListener('change', (e) => {
-            const liqInput = document.getElementById('liquidity-assistance');
-            if (e.target.value === 'WETH') {
-                liqInput.value = '2';
-            } else {
-                liqInput.value = '10000';
-            }
-        });
-
-        // Interdependent fields logic
-        const startingPrice = document.getElementById('starting-price');
-        const totalSupply = document.getElementById('total-supply');
-        const marketCap = document.getElementById('initial-market-cap');
-        const transitionPrice = document.getElementById('transition-price');
-
-        function updateMarketCapAndTransition() {
-            const price = parseFloat(startingPrice.value);
-            const supply = parseFloat(totalSupply.value);
-            if (!isNaN(price)) {
-                transitionPrice.value = (price * 1.1);
-            }
-            if (!isNaN(price) && !isNaN(supply) && supply > 0) {
-                marketCap.value = (price * supply).toFixed(2);
-            }
-        }
-
-        function updateStartingPrice() {
-            const cap = parseFloat(marketCap.value);
-            const supply = parseFloat(totalSupply.value);
-            if (!isNaN(cap) && !isNaN(supply) && supply > 0) {
-                startingPrice.value = (cap / supply);
-                // Also update transition since starting price changed
-                const price = parseFloat(startingPrice.value);
-                if (!isNaN(price)) {
-                    transitionPrice.value = (price * 1.1);
-                }
-            }
-        }
-
-        startingPrice.addEventListener('input', updateMarketCapAndTransition);
-        totalSupply.addEventListener('input', updateMarketCapAndTransition);
-        marketCap.addEventListener('input', updateStartingPrice);
-
-        // Form submit
-        document.getElementById('deploy-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!signer) {
-                showError('Connect wallet first');
-                return;
-            }
-            showSpinner(true);
-            try {
-                // Gather form data
-                const name = document.getElementById('token-name').value;
-                const symbol = document.getElementById('token-symbol').value;
-                // ... other fields
-                // Call contract deploy function from contracts.js
-                const tx = await deployToken(/* params */);
-                await tx.wait();
-                // Redirect to token page
-                window.location.href = `token.html?symbol=${symbol}`;
-            } catch (err) {
-                showError(err.message);
-            } finally {
-                showSpinner(false);
-            }
-        });
-    </script>
 </body>
 </html>

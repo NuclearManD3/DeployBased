@@ -19,9 +19,18 @@ const factoryAddresses = {
 	testnet: '0xREPLACE_FACTORY_TESTNET'
 };
 
+const tokenAddresses = {
+	mainnetUSDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+}
+
+const tokenDecimals = {
+	mainnetUSDC: 6
+}
+
 const factoryAbi = [
-    'function totalTokens() view returns (uint256)',
-    'function tokens(uint256) view returns (address)'
+	'function totalTokens() view returns (uint256)',
+	'function tokens(uint256) view returns (address)',
+	'function launchToken(string memory, string memory, uint8, address, uint24, uint256, uint256, uint96, uint128, uint128) returns (address, address)'
 ];
 
 const erc20ReadAbi = [
@@ -385,41 +394,95 @@ async function loadData() {
 			showSpinner(false);
 		}
 	} else if (path.endsWith('deploy.html')) {
-        // Sliders update
-        document.getElementById('initial-market-cap').addEventListener('input', (e) => {
-            document.getElementById('initial-market-cap-value').innerText = e.target.value;
-        });
-        document.getElementById('liquidity-assistance').addEventListener('input', (e) => {
-            document.getElementById('liquidity-assistance-value').innerText = `${e.target.value}%`;
-        });
-        document.getElementById('tokens-to-purchase').addEventListener('input', (e) => {
-            document.getElementById('tokens-to-purchase-value').innerText = `${e.target.value}%`;
-        });
+		// Update slider displays
+		const marketCapInput = document.getElementById('initial-market-cap');
+		const liquidityInput = document.getElementById('liquidity-assistance');
+		const purchaseInput = document.getElementById('tokens-to-purchase');
 
-        document.getElementById('deploy-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!signer) {
-                showError('Connect wallet first');
-                return;
-            }
-            showSpinner(true);
-            try {
-                // Gather form data
-                const name = document.getElementById('token-name').value;
-                const symbol = document.getElementById('token-symbol').value;
-                // ... other fields
-                // Call contract deploy function from contracts.js
-                const tx = await deployToken(/* params */);
-                await tx.wait();
-                // Redirect to token page
-                window.location.href = `token.html?symbol=${symbol}`;
-            } catch (err) {
-                showError(err.message);
-            } finally {
-                showSpinner(false);
-            }
-        });
-    } else if (path.endsWith('token.html')) {
+		marketCapInput.addEventListener('input', (e) => {
+			document.getElementById('initial-market-cap-value').innerText = e.target.value;
+		});
+		liquidityInput.addEventListener('input', (e) => {
+			document.getElementById('liquidity-assistance-value').innerText = `${e.target.value}%`;
+		});
+		purchaseInput.addEventListener('input', (e) => {
+			document.getElementById('tokens-to-purchase-value').innerText = `${e.target.value}%`;
+		});
+
+		document.getElementById('deploy-form').addEventListener('submit', async (e) => {
+			e.preventDefault();
+			if (!signer) {
+				showError('Connect wallet first');
+				return;
+			}
+			showSpinner(true);
+			try {
+				// Gather form values
+				const name = document.getElementById('token-name').value;
+				const symbol = document.getElementById('token-symbol').value;
+				const decimals = parseInt(document.getElementById('decimals').value);
+				const totalSupply = ethers.utils.parseUnits(document.getElementById('total-supply').value, decimals);
+
+				const startPriceRaw = parseFloat(document.getElementById('starting-price').value);
+				const switchPriceRaw = parseFloat(document.getElementById('transition-price').value);
+
+				const reserveTokenSymbol = document.getElementById('reserve-token').value;
+				const reserveAddress = tokenAddresses[currentNetwork + reserveTokenSymbol];
+				const reserveDecimals = tokenDecimals[currentNetwork + reserveTokenSymbol];
+
+				const curveLimit = ethers.utils.parseUnits(document.getElementById('liquidity-assistance').value, reserveDecimals);
+				const tokensToPurchasePercent = parseFloat(document.getElementById('tokens-to-purchase').value);
+				const fee = 10000;
+				const amountToPurchase = totalSupply.mul(Math.floor(tokensToPurchasePercent * 100)).div(10000); // convert % to fraction
+
+				// Convert prices to raw units according to both token decimals
+				function toRawPrice(price, launchDecimals, reserveDecimals) {
+					// 128.128 fixed-point, but scaled to integer: price * 10**reserveDecimals / 10**launchDecimals
+					return ethers.BigNumber.from(Math.floor(price * 10 ** reserveDecimals))
+						.mul(ethers.BigNumber.from(2).pow(128))
+						.div(ethers.BigNumber.from(10).pow(launchDecimals));
+				}
+
+				const startPrice = toRawPrice(startPriceRaw, decimals, reserveDecimals);
+				const switchPrice = toRawPrice(switchPriceRaw, decimals, reserveDecimals);
+
+				const twoPow128 = ethers.BigNumber.from(2).pow(128);
+				const dy = twoPow128.mul(curveLimit).div(startPrice.add(switchPrice));
+				const y1 = totalSupply.sub(dy);
+				const reserveOffset = switchPrice.mul(y1).div(twoPow128).sub(curveLimit);
+				console.log(twoPow128, dy, y1, reserveOffset);
+
+				// Connect to factory
+				const factoryAddress = factoryAddresses[currentNetwork];
+				if (!factoryAddress) throw new Error('Factory not configured for this network');
+				const factory = new ethers.Contract(factoryAddress, factoryAbi, signer);
+
+				console.log(startPrice, switchPrice, curveLimit, reserveOffset, totalSupply);
+
+				// Send transaction
+				const tx = await factory.launchToken(
+					name,
+					symbol,
+					decimals,
+					reserveAddress,
+					fee,
+					startPrice,
+					switchPrice,
+					curveLimit,
+					reserveOffset,
+					totalSupply
+				);
+				await tx.wait();
+
+				// Redirect to token page
+				window.location.href = `token.html?symbol=${symbol}`;
+			} catch (err) {
+				showError(err.message);
+			} finally {
+				showSpinner(false);
+			}
+		});
+	} else if (path.endsWith('token.html')) {
 		const params = new URLSearchParams(window.location.search);
 		const tokenAddress = params.get('address');
 		if (!tokenAddress) return;
