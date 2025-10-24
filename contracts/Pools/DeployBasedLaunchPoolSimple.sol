@@ -126,8 +126,10 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		if (_launch < _reserve) {
 			poolPolarity = false;
 			priceTmp = 0x100000000000000000000000000000000 / priceTmp;
+			setReserves(initParams.initialLaunchTokens, 0);
 		} else {
 			poolPolarity = true;
+			setReserves(0, initParams.initialLaunchTokens);
 		}
 
 		minimumPrice128128 = priceTmp;
