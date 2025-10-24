@@ -34,7 +34,7 @@ contract DeployBasedTokenFactory is /*IDeployBasedTokenFactory,*/ Ownable {
 
 		{
 			uint96 priceMultiple = uint96(switchPrice - startPrice);
-			uint160 sqrtPriceX96 = uint160(token < reserve
+			uint160 sqrtPriceX96 = uint160(token > reserve
 				? uint256(0x0010000000000000000000000000000000000000000) / Math.sqrt(startPrice)
 				: uint256(Math.sqrt(startPrice)) << 32);
 
