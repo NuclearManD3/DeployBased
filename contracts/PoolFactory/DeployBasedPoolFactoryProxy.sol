@@ -35,8 +35,7 @@ contract DeployBasedPoolFactoryProxy is Ownable {
 
 	fallback() external payable {
 		assembly {
-			let ptr := mload(0x40)
-			calldatacopy(ptr, 0, calldatasize())
+			calldatacopy(0, 0, calldatasize())
 			let result := delegatecall(gas(), sload(0x100071), 0, calldatasize(), 0, 0)
 			returndatacopy(0, 0, returndatasize())
 			switch result
