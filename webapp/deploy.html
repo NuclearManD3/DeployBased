@@ -57,28 +57,32 @@
 
             <details>
                 <summary>Advanced Configuration</summary>
-                <label for="reserve-token">Reserve Token:</label>
-                <select id="reserve-token">
-                    <option value="USDC" selected>USDC</option>
-                    <option value="USDS">USDS</option>
-                    <option value="WETH">WETH</option>
-                </select>
-                <br>
-
-                <label for="decimals">Decimals (0-32):</label>
-                <input type="number" id="decimals" min="0" max="32" value="18" required>
-                <br>
-
-                <label for="total-supply">Total Supply:</label>
-                <input type="number" id="total-supply" value="1000000000" required>
-                <br>
-
-                <label for="liquidity-assistance">Linear Limit:</label>
-                <input type="number" id="liquidity-assistance" value="10000" required>
-                <br>
-
-                <label for="transition-price">Transition Price:</label>
-                <input type="number" id="transition-price" value="0.000011" required>
+                <table>
+                    <tr>
+                        <td><label for="reserve-token">Reserve Token:</label></td>
+                        <td><select id="reserve-token">
+                            <option value="USDC" selected>USDC</option>
+                            <option value="USDS">USDS</option>
+                            <option value="WETH">WETH</option>
+                        </select></td>
+                    </tr>
+                    <tr>
+                        <td><label for="decimals">Decimals (0-32):</label></td>
+                        <td><input type="number" id="decimals" min="0" max="32" value="18" required></td>
+                    </tr>
+                    <tr>
+                        <td><label for="total-supply">Total Supply:</label></td>
+                        <td><input type="number" id="total-supply" value="1000000000" required></td>
+                    </tr>
+                    <tr>
+                        <td><label for="liquidity-assistance">Linear Limit:</label></td>
+                        <td><input type="number" id="liquidity-assistance" value="10000" required></td>
+                    </tr>
+                    <tr>
+                        <td><label for="transition-price">Transition Price:</label></td>
+                        <td><input type="number" id="transition-price" value="0.000011" required></td>
+                    </tr>
+                </table>
             </details>
 
             <button type="submit">Deploy Token</button>
@@ -95,18 +99,29 @@
             document.getElementById('tokens-to-purchase-value').innerText = `${e.target.value}%`;
         });
 
-        document.getElementById('liquidity-assistance').addEventListener('input', (e) => {
-            document.getElementById('liquidity-assistance-value').innerText = e.target.value;
+        // Reserve token change
+        const reserveSelect = document.getElementById('reserve-token');
+        reserveSelect.addEventListener('change', (e) => {
+            const liqInput = document.getElementById('liquidity-assistance');
+            if (e.target.value === 'WETH') {
+                liqInput.value = '2';
+            } else {
+                liqInput.value = '10000';
+            }
         });
 
         // Interdependent fields logic
         const startingPrice = document.getElementById('starting-price');
         const totalSupply = document.getElementById('total-supply');
         const marketCap = document.getElementById('initial-market-cap');
+        const transitionPrice = document.getElementById('transition-price');
 
-        function updateMarketCap() {
+        function updateMarketCapAndTransition() {
             const price = parseFloat(startingPrice.value);
             const supply = parseFloat(totalSupply.value);
+            if (!isNaN(price)) {
+                transitionPrice.value = (price * 1.1);
+            }
             if (!isNaN(price) && !isNaN(supply) && supply > 0) {
                 marketCap.value = (price * supply).toFixed(2);
             }
@@ -116,12 +131,17 @@
             const cap = parseFloat(marketCap.value);
             const supply = parseFloat(totalSupply.value);
             if (!isNaN(cap) && !isNaN(supply) && supply > 0) {
-                startingPrice.value = (cap / supply).toFixed(8);
+                startingPrice.value = (cap / supply);
+                // Also update transition since starting price changed
+                const price = parseFloat(startingPrice.value);
+                if (!isNaN(price)) {
+                    transitionPrice.value = (price * 1.1);
+                }
             }
         }
 
-        startingPrice.addEventListener('input', updateMarketCap);
-        totalSupply.addEventListener('input', updateMarketCap);
+        startingPrice.addEventListener('input', updateMarketCapAndTransition);
+        totalSupply.addEventListener('input', updateMarketCapAndTransition);
         marketCap.addEventListener('input', updateStartingPrice);
 
         // Form submit
