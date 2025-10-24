@@ -51,7 +51,7 @@ contract UniversalSafeERC20 is BasicERC20, Ownable, ISafeERC20Callbacks {
 		if (msg.sender == impl || impl == address(0))
 			return;
 		assembly {
-            tstore(0, caller())
+			tstore(0, caller())
 			calldatacopy(0, 0, calldatasize())
 			let result := call(gas(), impl, callvalue(), 0, calldatasize(), 0, 0)
 			returndatacopy(0, 0, returndatasize())
@@ -60,7 +60,7 @@ contract UniversalSafeERC20 is BasicERC20, Ownable, ISafeERC20Callbacks {
 				revert(0, returndatasize())
 			}
 			default {
-                tstore(0, 0)
+				tstore(0, 0)
 				return(0, returndatasize())
 			}
 		}
@@ -70,11 +70,11 @@ contract UniversalSafeERC20 is BasicERC20, Ownable, ISafeERC20Callbacks {
 	**   Implementation/Extensibility calls
 	*/
 
-    function originalSender() external returns (address sender) {
-        assembly {
-            sender := tload(0)
-        }
-    }
+	function originalSender() external returns (address sender) {
+		assembly {
+			sender := tload(0)
+		}
+	}
 
 	function implBurn(uint256 tokens) external onlyImplementation {
 		_burn(address(this), tokens);
@@ -101,7 +101,7 @@ contract UniversalSafeERC20 is BasicERC20, Ownable, ISafeERC20Callbacks {
 
 	function implApprove(address dst, uint256 allowance) external onlyImplementation {
 		_allowances[address(this)][dst] = allowance;
-        emit Approval(address(this), dst, allowance);
+		emit Approval(address(this), dst, allowance);
 	}
 
 	function implTransferToken(address token, address dst, uint256 amount) external onlyImplementation {

@@ -25,18 +25,18 @@ contract DeployBasedTokenFactory is IDeployBasedTokenFactory, Ownable {
 	function launchToken(string memory name, string memory symbol, uint8 decimals, address reserve, uint24 fee, uint96 priceMultiple, uint160 sqrtPriceX96, uint96 curveLimit, uint128 reserveOffset, uint128 amount)
 		external returns (address token, address pool)
 	{
-        address _factory = poolFactory;
+		address _factory = poolFactory;
 		token = address(new UniversalSafeERC20(name, symbol, decimals, address(this), amount));
-        IERC20(token).approve(_factory, amount);
-        pool = IDeployBasedPoolFactory(_factory).createPool(reserve, token, fee, priceMultiple, sqrtPriceX96, curveLimit, reserveOffset, amount, msg.sender);
-        Ownable(token).transferOwnership(msg.sender);
+		IERC20(token).approve(_factory, amount);
+		pool = IDeployBasedPoolFactory(_factory).createPool(reserve, token, fee, priceMultiple, sqrtPriceX96, curveLimit, reserveOffset, amount, msg.sender);
+		Ownable(token).transferOwnership(msg.sender);
 
-        unchecked {
-            uint256 counter = totalTokens;
-            tokens[counter] = token;
-            totalTokens = counter + 1;
-        }
+		unchecked {
+			uint256 counter = totalTokens;
+			tokens[counter] = token;
+			totalTokens = counter + 1;
+		}
 
-        emit TokenCreated(token, decimals, name, symbol);
+		emit TokenCreated(token, decimals, name, symbol);
 	}
 }

@@ -7,9 +7,9 @@ import "../interfaces/IERC20.sol";
 
 
 contract DeployBasedTokenFactoryProxy is Ownable {
-    uint256 public totalTokens;
-    mapping(uint256 => address) public tokens;
-    address public poolFactory;
+	uint256 public totalTokens;
+	mapping(uint256 => address) public tokens;
+	address public poolFactory;
 
 	function implementation() public view returns (address impl) {
 		assembly {
@@ -18,7 +18,7 @@ contract DeployBasedTokenFactoryProxy is Ownable {
 	}
 
 	constructor(address impl, address _poolFactory) {
-        poolFactory = _poolFactory;
+		poolFactory = _poolFactory;
 		assembly {
 			sstore(0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, impl)
 		}
