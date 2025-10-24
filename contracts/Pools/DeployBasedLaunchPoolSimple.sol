@@ -112,6 +112,10 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		_;
 	}
 
+	function invertPrice128(uint256 price) internal pure returns (uint256) {
+		return Math.mulDiv(0x100000000000000000000000000000000, 0x100000000000000000000000000000000, price);
+	}
+
 	constructor(address _reserve, address _launch, uint24 _fee, LaunchPoolInitParams memory initParams)
 		UniswapV3PoolEmulator(initParams.sqrtPriceX96, msg.sender, _reserve, _launch, _fee) {
 
@@ -125,7 +129,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		priceTmp = Math.mulDiv(priceTmp, priceTmp, 0x10000000000000000 /* 1 << (192 - 128) */);
 		if (_launch < _reserve) {
 			poolPolarity = false;
-			priceTmp = 0x100000000000000000000000000000000 / priceTmp;
+			priceTmp = invertPrice128(priceTmp);
 			setReserves(initParams.initialLaunchTokens, 0);
 		} else {
 			poolPolarity = true;
@@ -166,7 +170,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
 		uint256 priceLimit = Math.mulDiv(sqrtPriceLimitX96, sqrtPriceLimitX96, 0x10000000000000000 /* 1 << (192 - 128) */);
 		if (!poolPolarity)
-			(lastPrice, priceLimit) = (0x100000000000000000000000000000000 / lastPrice, 0x100000000000000000000000000000000 / priceLimit);
+			(lastPrice, priceLimit) = (invertPrice128(lastPrice), invertPrice128(priceLimit));
 
 		uint256 newPrice;
 		if (inputToken == reserve) {
@@ -223,7 +227,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		uint256 lastPrice = Math.mulDiv(sqrtPriceX96, sqrtPriceX96, 0x10000000000000000 /* 1 << (192 - 128) */);
 		uint256 priceLimit = Math.mulDiv(sqrtPriceLimitX96, sqrtPriceLimitX96, 0x10000000000000000 /* 1 << (192 - 128) */);
 		if (!poolPolarity)
-			(lastPrice, priceLimit) = (0x100000000000000000000000000000000 / lastPrice, 0x100000000000000000000000000000000 / priceLimit);
+			(lastPrice, priceLimit) = (invertPrice128(lastPrice), invertPrice128(priceLimit));
 
 		uint256 newPrice;
 		if (inputToken == reserve) {

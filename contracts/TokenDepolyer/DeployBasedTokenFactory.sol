@@ -5,11 +5,14 @@ pragma solidity ^0.8.17;
 import "../abstract/ownable.sol";
 import "../interfaces/IDeployBasedPoolFactory.sol";
 import "../interfaces/IDeployBasedTokenFactory.sol";
+import "../libs/Math.sol";
 
 import "./UniversalSafeERC20.sol";
 
 
-contract DeployBasedTokenFactory is IDeployBasedTokenFactory, Ownable {
+// Note that some of the functionality is implemented in the proxy contract, so to save
+// precious bytecode, some functionality remains internal for this implementation contract.
+contract DeployBasedTokenFactory is /*IDeployBasedTokenFactory,*/ Ownable {
 	// Proxy exposes these, so we can keep them internal
 	uint256 internal totalTokens;
 	mapping(uint256 => address) internal tokens;
@@ -22,12 +25,18 @@ contract DeployBasedTokenFactory is IDeployBasedTokenFactory, Ownable {
 		poolFactory = _new;
 	}
 
-	function launchToken(string memory name, string memory symbol, uint8 decimals, address reserve, uint24 fee, uint96 priceMultiple, uint160 sqrtPriceX96, uint96 curveLimit, uint128 reserveOffset, uint128 amount)
+	function launchToken(string memory name, string memory symbol, uint8 decimals, address reserve, uint24 fee, uint256 startPrice, uint256 switchPrice, uint96 curveLimit, uint128 reserveOffset, uint128 amount)
 		external returns (address token, address pool)
 	{
 		address _factory = poolFactory;
 		token = address(new UniversalSafeERC20(name, symbol, decimals, address(this), amount));
 		IERC20(token).approve(_factory, amount);
+
+		uint96 priceMultiple = uint96(switchPrice - startPrice);
+		uint160 sqrtPriceX96 = uint160(token < reserve
+			? uint256(0x0010000000000000000000000000000000000000000) / Math.sqrt(startPrice)
+			: uint256(Math.sqrt(startPrice)) << 32);
+
 		pool = IDeployBasedPoolFactory(_factory).createPool(reserve, token, fee, priceMultiple, sqrtPriceX96, curveLimit, reserveOffset, amount, msg.sender);
 		Ownable(token).transferOwnership(msg.sender);
 
@@ -37,6 +46,6 @@ contract DeployBasedTokenFactory is IDeployBasedTokenFactory, Ownable {
 			totalTokens = counter + 1;
 		}
 
-		emit TokenCreated(token, decimals, name, symbol);
+		emit IDeployBasedTokenFactory.TokenCreated(token, decimals, name, symbol);
 	}
 }
