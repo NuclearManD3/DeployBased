@@ -30,7 +30,8 @@ const tokenDecimals = {
 const factoryAbi = [
 	'function totalTokens() view returns (uint256)',
 	'function tokens(uint256) view returns (address)',
-	'function launchToken(string memory, string memory, uint8, address, uint24, uint256, uint256, uint96, uint128, uint128) returns (address, address)'
+	'function launchToken(string memory, string memory, uint8, address, uint24, uint256, uint256, uint96, uint128, uint128) returns (address, address)',
+	'event TokenCreated(address indexed token, uint8 decimals, string name, string symbol)'
 ];
 
 const erc20ReadAbi = [
@@ -303,7 +304,7 @@ async function renderTokenList() {
 			item.classList.add('token-item');
 			const label = token.name || token.symbol || token.address;
 			const sym = token.symbol || '';
-			item.innerHTML = `<a href="token.html?address=${token.address}&symbol=${encodeURIComponent(sym)}">${label} ${sym ? `(${sym})` : ''}</a>`;
+			item.innerHTML = `<a href="token.html?address=${token.address}">${label} ${sym ? `(${sym})` : ''}</a>`;
 			tokenList.appendChild(item);
 		});
 	}
@@ -564,10 +565,11 @@ async function loadData() {
 					reserveOffset,
 					totalSupply
 				);
-				await tx.wait();
+				const receipt = await tx.wait();
 
-				// Redirect to token page
-				window.location.href = `token.html?symbol=${symbol}`;
+				const { token, _1, _2, _3 } = receipt.events.find(e => e.event === 'TokenCreated')?.args || {};
+
+				window.location.href = `token.html?address=${token}`;
 			} catch (err) {
 				showError(err.message);
 			} finally {
