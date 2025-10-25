@@ -286,6 +286,29 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		}
 	}
 
+	function afterSwap(bool zeroForOne, uint256 tokensIn, uint256 tokensOut) internal override {
+		{
+			(uint128 reserve0, uint128 reserve1) = reserves();
+			uint256 feeOut = Math.mulDiv(tokensOut, fee, 1e6 - fee);
+
+			if (zeroForOne) {
+				reserve0 += uint128(tokensIn);
+				reserve1 -= uint128(tokensOut + feeOut);
+			} else {
+				reserve1 += uint128(tokensIn);
+				reserve0 -= uint128(tokensOut + feeOut);
+			}
+
+			setReserves(reserve0, reserve1);
+		}
+
+		if (poolPolarity == zeroForOne) {
+			uint256 amount = IERC20(reserve).balanceOf(address(this));
+			IERC20(reserve).approve(address(lendingPool), amount);
+			lendingPool.supply(reserve, amount);
+		}
+	}
+
 	/// @param token the token to get a balance of
 	/// @dev Get the pool's balance of a given token
 	/// @dev This function is gas optimized to avoid a redundant extcodesize check in addition to the returndatasize
@@ -325,7 +348,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		return (uint128(amount0 - protocolFee0), uint128(amount1 - protocolFee1));
 	}
 
-	function donate(uint128 amount0, uint128 amount1) external lock returns (uint128, uint128) {
+	/*function donate(uint128 amount0, uint128 amount1) external lock returns (uint128, uint128) {
 		(uint128 reserve0, uint128 reserve1) = reserves();
 
 		// Correct the input amounts to match our reserves
@@ -353,5 +376,5 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		setReserves(reserve0, reserve1);
 
 		return (amount0, amount1);
-	}
+	}*/
 }

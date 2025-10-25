@@ -245,6 +245,7 @@ abstract contract UniswapV3PoolEmulator {
 	function computeExpectedTokensIn(address inputToken, uint256 tokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public virtual view returns (uint256 tokensIn, uint256 tokensOutActual, uint160 newSqrtPriceX96);
 	function payTokensToSwapper(address token, uint256 amount, address recipient) internal virtual;
 	function acceptTokensFromSwapper(address token, uint256 amount) internal virtual;
+	function afterSwap(bool zeroForOne, uint256 tokensIn, uint256 tokensOut) internal virtual;
 	function computeFlashLoanFee(uint256 amount0, uint256 amount1) public virtual view returns (uint256 fee0, uint256 fee1) {
 		return (amount0 / 500, amount1 / 500);
 	}
@@ -283,6 +284,12 @@ abstract contract UniswapV3PoolEmulator {
 			} else {
 				(tokensIn, tokensOut, newSqrtPriceX96) = computeExpectedTokensIn(zeroForOne ? token0 : token1, uint256(-amountSpecified), slot0Start.sqrtPriceX96, sqrtPriceLimitX96);
 				tokensIn = Math.mulDiv(tokensIn, 1e6, 1e6 - fee);
+				// tokensOutPreFee = tokensOut + feeOut;
+				// feeOut = tokensOutPreFee * fee
+				// feeOut / fee = tokensOut + feeOut
+				// feeOut - fee * feeOut = tokensOut * fee
+				// feeOut * (1 - fee) = tokensOut * fee
+				// feeOut = tokensOut * fee / (1 - fee)
 			}
 
 			// Update price data and write an oracle entry if the tick changed
@@ -317,7 +324,7 @@ abstract contract UniswapV3PoolEmulator {
 		require(balanceAfter - balanceBefore >= tokensIn, 'IIA');
 
 		// Accept the received tokens
-		acceptTokensFromSwapper(zeroForOne ? token0 : token1, balanceAfter - balanceBefore);
+		afterSwap(zeroForOne, tokensIn, tokensOut);
 		//_swapExchangeRaw(zeroForOne, tokensIn, tokensOut, amount0, amount1, recipient, data);
 
 		// Event
