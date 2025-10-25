@@ -38,11 +38,194 @@
 	<main>
 		<h1 id="token-name">Token Name</h1>
 		<p id="token-details">Details here...</p>
-    </main>
-    <div id="loading-spinner" class="hidden">Loading...</div>
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5/dist/ethers.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-    <script src="contracts.js"></script>
-    <script src="app.js"></script>
+
+		<hr>
+
+		<section id="swap-section" class="swap-section">
+            <h2>Swap Tokens</h2>
+            <div class="swap-row">
+                <div class="swap-input">
+                    <input type="number" id="swap-amount-in" placeholder="Amount" min="0">
+                    <select id="swap-token-in">
+                        <option value="" disabled>Select token</option>
+                        <option value="" id="page-token-in">Token</option>
+                    </select>
+                </div>
+                <button id="swap-direction" title="Switch tokens">⇅</button>
+                <div class="swap-input">
+                    <input type="number" id="swap-amount-out" placeholder="Estimated" min="0" disabled>
+                    <select id="swap-token-out">
+                        <option value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" selected>USDC</option>
+                    </select>
+                </div>
+            </div>
+            <button id="swap-button">Swap</button>
+            <div id="swap-status"></div>
+        </section>
+	</main>
+
+	<div id="loading-spinner" class="hidden">Loading...</div>
+
+	<script src="https://cdn.jsdelivr.net/npm/ethers@5/dist/ethers.umd.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+	<script src="contracts.js"></script>
+	<script src="swaps.js"></script>
+	<script src="app.js"></script>
+
+<style>
+.swap-section {
+	background-color: #1e1e1e;
+	color: #eee;
+	padding: 1rem;
+	border-radius: 12px;
+	max-width: 480px;
+	margin-top: 2rem;
+}
+.swap-section h2 {
+	margin-bottom: 1rem;
+	font-weight: 600;
+}
+.swap-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+.swap-input {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+}
+.swap-input input,
+.swap-input select {
+	padding: 0.5rem;
+	border-radius: 6px;
+	border: 1px solid #555;
+	background: #2b2b2b;
+	color: #eee;
+	font-size: 1rem;
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+input[type=number] {
+	-moz-appearance: textfield;
+	appearance: none;
+}
+#swap-direction {
+	background: none;
+	color: #eee;
+	font-size: 1.5rem;
+	border: none;
+	cursor: pointer;
+}
+#swap-button {
+	width: 100%;
+	padding: 0.75rem;
+	border-radius: 8px;
+	border: none;
+	background-color: #4a90e2;
+	color: #fff;
+	font-weight: 600;
+	margin-top: 1rem;
+	cursor: pointer;
+}
+#swap-button:disabled {
+	background-color: #888;
+	cursor: not-allowed;
+}
+</style>
+<script>
+(async () => {
+	// Assume swaps.js is imported as "swaps"
+	const swapAmountIn = document.getElementById('swap-amount-in');
+	const swapAmountOut = document.getElementById('swap-amount-out');
+	const swapTokenIn = document.getElementById('swap-token-in');
+	const swapTokenOut = document.getElementById('swap-token-out');
+	const swapButton = document.getElementById('swap-button');
+	const swapStatus = document.getElementById('swap-status');
+	const swapDirectionBtn = document.getElementById('swap-direction');
+
+	// Set the token page's token address in dropdown
+	const tokenPageAddress = new URLSearchParams(window.location.search).get('address');
+	const pageTokenOption = document.getElementById('page-token-in');
+	pageTokenOption.value = tokenPageAddress;
+	pageTokenOption.text = 'Your Token';
+	pageTokenOption.selected = true;
+
+	// Helper for debounced estimated output
+	let debounceTimer;
+	function debouncedEstimate() {
+		clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(estimateOut, 500);
+	}
+
+	async function estimateOut() {
+		const inAddr = swapTokenIn.value;
+		const outAddr = swapTokenOut.value;
+		const amountIn = parseFloat(swapAmountIn.value);
+		if (!inAddr || !outAddr || isNaN(amountIn) || amountIn <= 0) {
+			swapAmountOut.value = '';
+			return;
+		}
+
+		try {
+			// 6 decimals for USDC, 18 for ERC20 launch token, adjust if needed
+			const amountInRaw = ethers.utils.parseUnits(amountIn.toString(), inAddr === tokenPageAddress ? 18 : 6);
+			const estimatedOut = await estimateSwap(signer, inAddr, outAddr, amountInRaw);
+			const decimalsOut = outAddr === tokenPageAddress ? 18 : 6;
+			swapAmountOut.value = ethers.utils.formatUnits(estimatedOut, decimalsOut);
+		} catch (err) {
+			swapAmountOut.value = '';
+			console.error(err);
+		}
+	}
+
+	// Swap direction
+	swapDirectionBtn.addEventListener('click', () => {
+		const tempAddr = swapTokenIn.value;
+		swapTokenIn.value = swapTokenOut.value;
+		swapTokenOut.value = tempAddr;
+
+		const tempVal = swapAmountIn.value;
+		swapAmountIn.value = swapAmountOut.value;
+		swapAmountOut.value = tempVal;
+
+		debouncedEstimate();
+	});
+
+	// Event listeners
+	swapAmountIn.addEventListener('input', debouncedEstimate);
+	swapTokenIn.addEventListener('change', debouncedEstimate);
+	swapTokenOut.addEventListener('change', debouncedEstimate);
+
+	swapButton.addEventListener('click', async () => {
+		const inAddr = swapTokenIn.value;
+		const outAddr = swapTokenOut.value;
+		const amountIn = parseFloat(swapAmountIn.value);
+		if (!signer || !inAddr || !outAddr || isNaN(amountIn) || amountIn <= 0) {
+			alert('Fill in valid amount and connect wallet.');
+			return;
+		}
+
+		swapButton.disabled = true;
+		swapStatus.innerText = 'Swapping...';
+		try {
+			const amountInRaw = ethers.utils.parseUnits(amountIn.toString(), inAddr === tokenPageAddress ? 18 : 6);
+			const tx = await swaps.swapExactIn(inAddr, outAddr, amountInRaw, signer);
+			await tx.wait();
+			swapStatus.innerText = 'Swap successful!';
+			swapAmountIn.value = '';
+			swapAmountOut.value = '';
+		} catch (err) {
+			swapStatus.innerText = 'Swap failed: ' + err.message;
+			console.error(err);
+		} finally {
+			swapButton.disabled = false;
+		}
+	});
+})();
+</script>
 </body>
 </html>

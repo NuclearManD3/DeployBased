@@ -615,23 +615,6 @@ async function loadData() {
 				<p><strong>Owner:</strong> ${ownerAddr}</p>
 			`;
 
-			document.getElementById('buy-token').addEventListener('click', async () => {
-				if (!signer) {
-					showError('Connect wallet first');
-					return;
-				}
-				showSpinner(true);
-				try {
-					const tx = await buyToken(tokenAddress);
-					await tx.wait();
-					showError('Purchase successful!');
-				} catch (err) {
-					showError(err.message);
-				} finally {
-					showSpinner(false);
-				}
-			});
-
 		} catch (err) {
 			console.error('Error loading token:', err);
 			tokenNameElem.innerText = 'Error';
