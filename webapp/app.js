@@ -34,24 +34,10 @@ const factoryAbi = [
 	'event TokenCreated(address indexed token, uint8 decimals, string name, string symbol)'
 ];
 
-const erc20ReadAbi = [
-	'function name() view returns (string)',
-	'function symbol() view returns (string)',
-	'function decimals() view returns (uint8)'
-];
-
 const MAX_TOKENS_FETCH = 200; // safety cap to avoid huge loops
 // ----------------------------------------------------------------
 
 let currentNetwork = 'mainnet';
-
-// simple in-memory cache to avoid repeated RPC calls
-const tokenCache = {
-	network: null,
-	ts: 0,
-	ttl: 60 * 1000, // 60s cache
-	tokens: []
-};
 
 // Wallet connection logic
 async function connectWallet() {
@@ -165,9 +151,8 @@ function disconnectWallet() {
 
 async function updateUSDCBalance() {
 	if (!signer) return;
-	const usdcContract = new ethers.Contract(usdcAddresses[currentNetwork], ['function balanceOf(address) view returns (uint256)'], signer);
-	const balance = await usdcContract.balanceOf(account);
-	document.getElementById('usdc-balance').innerText = `USDC: ${ethers.utils.formatUnits(balance, 6)}`;
+	const balance = await getTokenBalance(usdcAddresses[currentNetwork], account);
+	document.getElementById('usdc-balance').innerText = `USDC: ${balance}`;
 }
 
 function showSpinner(show) {
@@ -245,7 +230,7 @@ async function fetchTokensFromFactory() {
 
 	const readProvider = await getReadProvider();
 	const factoryAddress = factoryAddresses[currentNetwork];
-	if (!factoryAddress || factoryAddress === '0xREPLACE_FACTORY_MAINNET' || factoryAddress === '0xREPLACE_FACTORY_TESTNET') {
+	if (!factoryAddress) {
 		// no factory configured; return empty to avoid RPC spam
 		return [];
 	}
@@ -266,13 +251,12 @@ async function fetchTokensFromFactory() {
 		try {
 			const tokenAddr = await factory.tokens(i);
 			// read name/symbol/decimals with sequential calls
-			const tokenContract = new ethers.Contract(tokenAddr, erc20ReadAbi, readProvider);
 			let name = 'Unknown';
 			let symbol = '';
 			let decimals = 18;
-			try { name = await tokenContract.name(); } catch (e) { /* ignore */ }
-			try { symbol = await tokenContract.symbol(); } catch (e) { /* ignore */ }
-			try { decimals = await tokenContract.decimals(); } catch (e) { /* ignore */ }
+			try { name = await getTokenName(tokenAddr); } catch (e) { /* ignore */ }
+			try { symbol = await getTokenSymbol(tokenAddr); } catch (e) { /* ignore */ }
+			try { decimals = await getTokenDecimals(tokenAddr); } catch (e) { /* ignore */ }
 			out.push({ address: tokenAddr, name, symbol, decimals: Number(decimals) });
 		} catch (err) {
 			console.warn('Failed to fetch token at index', i, err);
@@ -358,15 +342,11 @@ async function loadData() {
 
 			for (let i = 0; i < total; i++) {
 				const addr = await factory.tokens(i);
-				const tokenContract = new ethers.Contract(addr, [
-					...erc20ReadAbi,
-					'function owner() view returns (address)'
-				], readProvider);
 
 				let symbol = '', name = '', ownerAddr = '';
-				try { symbol = await tokenContract.symbol(); } catch {}
-				try { name = await tokenContract.name(); } catch {}
-				try { ownerAddr = await tokenContract.owner(); } catch {}
+				try { symbol = await getTokenSymbol(addr); } catch {}
+				try { name = await getTokenName(addr); } catch {}
+				try { ownerAddr = await getTokenOwner(addr); } catch {}
 
 				if (ownerAddr.toLowerCase() === account.toLowerCase()) {
 					owned.push({
@@ -589,21 +569,12 @@ async function loadData() {
 		showSpinner(true);
 
 		try {
-			const readProvider = await getReadProvider();
-			const tokenContract = new ethers.Contract(tokenAddress, [
-				'function name() view returns (string)',
-				'function symbol() view returns (string)',
-				'function decimals() view returns (uint8)',
-				'function totalSupply() view returns (uint256)',
-				'function owner() view returns (address)'
-			], readProvider);
-
 			const [name, symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
-				tokenContract.name(),
-				tokenContract.symbol(),
-				tokenContract.decimals(),
-				tokenContract.totalSupply(),
-				tokenContract.owner()
+				getTokenName(tokenAddress),
+				getTokenSymbol(tokenAddress),
+				getTokenDecimals(tokenAddress),
+				getTokenSupply(tokenAddress),
+				getTokenOwner(tokenAddress)
 			]);
 
 			function makeAddressHTML(label, addr) {
@@ -636,7 +607,7 @@ async function loadData() {
 				<p><strong>Name:</strong> ${name}</p>
 				<p><strong>Symbol:</strong> ${symbol}</p>
 				<p><strong>Decimals:</strong> ${decimals}</p>
-				<p><strong>Total Supply:</strong> ${ethers.utils.formatUnits(totalSupply, decimals)}</p>
+				<p><strong>Total Supply:</strong> ${totalSupply}</p>
 				${makeAddressHTML('Owner', ownerAddr)}
 			`;
 
