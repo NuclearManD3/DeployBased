@@ -16,16 +16,19 @@ async function getReadProvider() {
 	return window.readProvider;
 }
 
-async function _getTokenContract(address) {
+async function _getTokenContract(address, signer=null) {
 	const abi = [
 		'function name() view returns (string)',
 		'function symbol() view returns (string)',
 		'function decimals() view returns (uint8)',
 		'function owner() view returns (address)',
 		'function totalSupply() view returns (uint256)',
-		'function balanceOf(address) view returns (uint256)'
+		'function balanceOf(address) view returns (uint256)',
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function approve(address spender, uint256 value) returns (bool)'
 	];
-	const provider = await getReadProvider();
+	if (signer == null)
+	    signer = await getReadProvider();
 	return new ethers.Contract(address, abi, provider);
 }
 
@@ -99,4 +102,17 @@ async function getTokenBalance(address, holder) {
 	const decimals = await getTokenDecimals(address);
 	const balance = await contract.balanceOf(holder);
 	return ethers.utils.formatUnits(balance, decimals);
+}
+
+async function getTokenApprovalRaw(address, holder, spender) {
+	const contract = await _getTokenContract(address);
+	//const decimals = await getTokenDecimals(address);
+	const balance = await contract.allowance(holder, spender);
+	return balance; //ethers.utils.formatUnits(balance, decimals);
+}
+
+async function setTokenApprovalRaw(signer, address, spender, amount) {
+	const contract = await _getTokenContract(address, signer);
+	//const decimals = await getTokenDecimals(address);
+	return await contract.approve(spender, amount);
 }

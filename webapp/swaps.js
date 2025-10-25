@@ -22,20 +22,14 @@ const poolAbi = [
 	'function computeExpectedTokensIn(address inputToken,uint256 maxTokensOut,uint160 sqrtPriceX96,uint160 sqrtPriceLimitX96) external view returns (uint256 tokensIn,uint256 tokensOut,uint160 newSqrtPriceX96)'
 ];
 
-const erc20Abi = [
-	'function allowance(address owner, address spender) view returns (uint256)',
-	'function approve(address spender, uint256 value) returns (bool)'
-];
-
 /**
  * Ensures SwapperV3 can spend user's tokens.
  */
 async function ensureApproval(signer, token, amount) {
-	const contract = new ethers.Contract(token, erc20Abi, signer);
 	const owner = await signer.getAddress();
-	const allowance = await contract.allowance(owner, SWAPPER_ADDRESS);
-	if (allowance < amount) {
-		const tx = await contract.approve(SWAPPER_ADDRESS, SQRT_PRICE_LIMIT_DOWN);
+	const allowance = await getTokenApprovalRaw(token, owner, SWAPPER_ADDRESS);
+	if (allowance.lt(amount)) {
+		const tx = await setTokenApprovalRaw(signer, token, SWAPPER_ADDRESS, SQRT_PRICE_LIMIT_DOWN);
 		await tx.wait();
 	}
 }
@@ -79,7 +73,6 @@ async function estimateSwap(signer, tokenIn, tokenOut, amount, exactIn = true) {
 		tokensIn = (tokensIn * 102n) / 100n;
 	}
 
-	console.log(tokensIn, tokensOut);
 	return { poolAddress, zeroForOne, tokensIn, tokensOut };
 }
 
