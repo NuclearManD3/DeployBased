@@ -268,3 +268,57 @@ button[type="submit"]:hover::after {
 .copy-btn:hover {
 	color: #fff;
 }
+
+#swap-direction {
+	background: none;
+	color: #eee;
+	font-size: 1.5rem;
+	border: none;
+	cursor: pointer;
+}
+#swap-button {
+	width: 100%;
+	padding: 0.75rem;
+	border-radius: 8px;
+	border: none;
+	background-color: #4a90e2;
+	color: #fff;
+	font-weight: 600;
+	margin-top: 1rem;
+	cursor: pointer;
+}
+#swap-button:disabled {
+	background-color: #888;
+	cursor: not-allowed;
+}
+
+.swap-section {
+	background-color: #1e1e1e;
+	color: #eee;
+	padding: 1rem;
+	border-radius: 12px;
+	margin-top: 2rem;
+}
+.swap-section h2 {
+	margin-bottom: 1rem;
+	font-weight: 600;
+}
+.swap-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+.swap-input {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+}
+.swap-input input,
+.swap-input select {
+	padding: 0.5rem;
+	border-radius: 6px;
+	border: 1px solid #555;
+	background: #2b2b2b;
+	color: #eee;
+	font-size: 1rem;
+}
