@@ -42,33 +42,32 @@
 		<hr>
 
 		<section id="swap-section" class="swap-section">
-            <h2>Swap Tokens</h2>
-            <div class="swap-row">
-                <div class="swap-input">
-                    <input type="number" id="swap-amount-in" placeholder="Amount" min="0">
-                    <select id="swap-token-in">
-                        <option value="" disabled>Select token</option>
-                        <option value="" id="page-token-in">Token</option>
-                    </select>
-                </div>
-                <button id="swap-direction" title="Switch tokens">⇅</button>
-                <div class="swap-input">
-                    <input type="number" id="swap-amount-out" placeholder="Estimated" min="0" disabled>
-                    <select id="swap-token-out">
-                        <option value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" selected>USDC</option>
-                    </select>
-                </div>
-            </div>
-            <button id="swap-button">Swap</button>
-            <div id="swap-status"></div>
-        </section>
+			<h2>Swap Tokens</h2>
+			<div class="swap-row">
+				<div class="swap-input">
+					<input type="number" id="swap-amount-in" placeholder="Amount" min="0">
+					<select id="swap-token-in">
+						<option value="" disabled>Select token</option>
+						<option value="" id="page-token-in">Token</option>
+					</select>
+				</div>
+				<button id="swap-direction" title="Switch tokens">⇅</button>
+				<div class="swap-input">
+					<input type="number" id="swap-amount-out" placeholder="Estimated" min="0" disabled>
+					<select id="swap-token-out">
+						<option value="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" selected>USDC</option>
+					</select>
+				</div>
+			</div>
+			<button id="swap-button">Swap</button>
+			<div id="swap-status"></div>
+		</section>
 	</main>
 
 	<div id="loading-spinner" class="hidden">Loading...</div>
 
 	<script src="https://cdn.jsdelivr.net/npm/ethers@5/dist/ethers.umd.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-	<script src="contracts.js"></script>
 	<script src="tokens.js"></script>
 	<script src="pools.js"></script>
 	<script src="swaps.js"></script>
