@@ -1,10 +1,10 @@
 // swaps.js
 
 const FACTORY_ADDRESS = '0x263a00623e00e135ec1810280d491c0fd4e5b8dd';
-const SWAPPER_ADDRESS = '0xYourSwapperV3AddressHere'; // replace
+const SWAPPER_ADDRESS = '0x828f0508971c67f472b7dd52155b5850a68cec86'; // replace
 const FEE_TIER = 10000; // 1%
 
-const SQRT_PRICE_LIMIT_UP = 0x1000276FFn;
+const SQRT_PRICE_LIMIT_UP = 0x1000000000n;
 const SQRT_PRICE_LIMIT_DOWN = 0x00fffd8963efd1fc6a506488495d951d5263988d00n;
 
 const poolFactoryAbi = [
@@ -35,7 +35,7 @@ async function ensureApproval(signer, token, amount) {
 	const owner = await signer.getAddress();
 	const allowance = await contract.allowance(owner, SWAPPER_ADDRESS);
 	if (allowance < amount) {
-		const tx = await contract.approve(SWAPPER_ADDRESS, amount);
+		const tx = await contract.approve(SWAPPER_ADDRESS, SQRT_PRICE_LIMIT_DOWN);
 		await tx.wait();
 	}
 }
@@ -55,7 +55,7 @@ async function estimateSwap(signer, tokenIn, tokenOut, amount, exactIn = true) {
 	console.log("sqrtPriceX96: " + sqrtPriceX96);
 
 	const zeroForOne = tokenIn.toLowerCase() < tokenOut.toLowerCase();
-	const sqrtLimit = zeroForOne ? SQRT_PRICE_LIMIT_DOWN : SQRT_PRICE_LIMIT_UP;
+	const sqrtLimit = zeroForOne ? SQRT_PRICE_LIMIT_UP : SQRT_PRICE_LIMIT_DOWN;
 
 	let tokensIn, tokensOut;
 	if (exactIn) {
@@ -67,7 +67,7 @@ async function estimateSwap(signer, tokenIn, tokenOut, amount, exactIn = true) {
 			sqrtLimit
 		));
 		// Apply 2% downward slippage margin
-		tokensOut = (tokensOut * 98n) / 100n;
+		tokensOut = tokensOut.mul(98n).div(100n);
 	} else {
 		({ tokensIn, tokensOut } = await pool.computeExpectedTokensIn(
 			tokenIn,
@@ -79,6 +79,7 @@ async function estimateSwap(signer, tokenIn, tokenOut, amount, exactIn = true) {
 		tokensIn = (tokensIn * 102n) / 100n;
 	}
 
+	console.log(tokensIn, tokensOut);
 	return { poolAddress, zeroForOne, tokensIn, tokensOut };
 }
 
