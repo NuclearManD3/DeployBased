@@ -1,3 +1,37 @@
+
+async function* allTokensGenerator(max = MAX_TOKENS_FETCH) {
+	const readProvider = await getReadProvider();
+	const factoryAddress = factoryAddresses[currentNetwork];
+	if (!factoryAddress) return;
+
+	const factory = new ethers.Contract(factoryAddress, factoryAbi, readProvider);
+
+	let total = 0;
+	try {
+		const totalBN = await factory.totalTokens();
+		total = Math.min(totalBN.toNumber(), max);
+	} catch (err) {
+		console.error('Failed to read totalTokens()', err);
+		return;
+	}
+
+	// iterate in reverse to get newest first
+	for (let i = total - 1; i >= 0; i--) {
+		try {
+			const addr = await factory.tokens(i);
+			let name = '', symbol = '', decimals = 18;
+			try { name = await getTokenName(addr); } catch {}
+			try { symbol = await getTokenSymbol(addr); } catch {}
+			try { decimals = await getTokenDecimals(addr); } catch {}
+			yield { address: addr, name: name || symbol || 'Unknown', symbol, decimals: Number(decimals) };
+		} catch (err) {
+			console.warn('Failed to fetch token at index', i, err);
+		}
+	}
+}
+
+
+
 (async () => {
 	if (!window.signer && window.ethereum) {
 		await checkWalletConnection();
@@ -6,25 +40,7 @@
 	const tokenListElem = document.getElementById('token-list');
 	if (!tokenListElem) return;
 
-	async function renderTokenList() {
-		showSpinner(true);
-		tokenListElem.innerHTML = '';
+    await renderList(tokenListElem, allTokensGenerator(), renderTokenCard);
 
-		const tokensFromChain = await fetchTokensFromFactory();
-		if (!tokensFromChain.length) {
-			tokenListElem.innerHTML = '<div class="token-item">No tokens found (or factory not configured)</div>';
-		} else {
-			tokensFromChain.forEach(token => {
-				const item = document.createElement('div');
-				item.classList.add('token-item');
-				const label = token.name || token.symbol || token.address;
-				const sym = token.symbol || '';
-				item.innerHTML = `<a href="token.html?address=${token.address}">${label} ${sym ? `(${sym})` : ''}</a>`;
-				tokenListElem.appendChild(item);
-			});
-		}
-		showSpinner(false);
-	}
-
-	renderTokenList();
 })();
+

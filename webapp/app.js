@@ -89,6 +89,58 @@ function makeAddressHTML(label, addr, root = "https://basescan.org/address/") {
     `;
 }
 
+function renderTokenCard(tok) {
+	const card = document.createElement('div');
+	card.classList.add('token-card');
+	card.innerHTML = `
+		<div class="token-header">
+			<a href="token.html?address=${tok.address}" class="token-link">${tok.name} (${tok.symbol})</a>
+		</div>
+		<div class="token-explorer">
+			${makeAddressHTML("Token address", tok.address, "https://basescan.org/token/")}
+		</div>
+	`;
+	// Copy button logic
+	card.querySelectorAll('.copy-btn').forEach(btn => {
+		btn.addEventListener('click', async () => {
+			try {
+				await navigator.clipboard.writeText(btn.dataset.addr);
+				btn.innerHTML = '✓';
+				setTimeout(() => {
+					btn.innerHTML = `
+						<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+							<path d="M5 15H4a2 2 0 0 1-2-2V4 a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+						</svg>`;
+				}, 1000);
+			} catch (err) {
+				console.error('Copy failed:', err);
+			}
+		});
+	});
+	return card;
+}
+
+async function renderList(container, generator, renderItem) {
+    // clear container
+	container.innerHTML = '';
+	showSpinner(true);
+
+	try {
+		for await (const item of generator) {
+			const card = renderItem(item);
+			container.appendChild(card);
+		}
+	} catch (err) {
+		console.error('Error rendering list:', err);
+		container.innerHTML = '<div class="token-item">Error loading items.</div>';
+	} finally {
+		showSpinner(false);
+	}
+}
+
+
+
 async function checkWalletConnection() {
 	if (!window.ethereum) return;
 
@@ -244,55 +296,6 @@ async function getReadProvider() {
 	if (provider) return provider;
 	// fallback readonly provider (kept as last resort)
 	return new ethers.providers.JsonRpcProvider(rpcUrls[currentNetwork]);
-}
-
-async function fetchTokensFromFactory() {
-	// use cache
-	if (tokenCache.network === currentNetwork && (Date.now() - tokenCache.ts) < tokenCache.ttl) {
-		return tokenCache.tokens;
-	}
-
-	const readProvider = await getReadProvider();
-	const factoryAddress = factoryAddresses[currentNetwork];
-	if (!factoryAddress) {
-		// no factory configured; return empty to avoid RPC spam
-		return [];
-	}
-
-	const factory = new ethers.Contract(factoryAddress, factoryAbi, readProvider);
-	let total = 0;
-	try {
-		const totalBN = await factory.totalTokens();
-		total = Math.min(totalBN.toNumber(), MAX_TOKENS_FETCH);
-	} catch (err) {
-		console.error('Failed to read totalTokens()', err);
-		return [];
-	}
-
-	const out = [];
-	// SERIAL fetch to avoid spamming RPC with parallel calls
-	for (let i = 0; i < total; i++) {
-		try {
-			const tokenAddr = await factory.tokens(i);
-			// read name/symbol/decimals with sequential calls
-			let name = 'Unknown';
-			let symbol = '';
-			let decimals = 18;
-			try { name = await getTokenName(tokenAddr); } catch (e) { /* ignore */ }
-			try { symbol = await getTokenSymbol(tokenAddr); } catch (e) { /* ignore */ }
-			try { decimals = await getTokenDecimals(tokenAddr); } catch (e) { /* ignore */ }
-			out.push({ address: tokenAddr, name, symbol, decimals: Number(decimals) });
-		} catch (err) {
-			console.warn('Failed to fetch token at index', i, err);
-			// continue quietly; don't abort the whole loop
-		}
-	}
-
-	// update cache
-	tokenCache.network = currentNetwork;
-	tokenCache.ts = Date.now();
-	tokenCache.tokens = out;
-	return out;
 }
 
 let renderTokenListLock = false;
