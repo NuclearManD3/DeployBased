@@ -34,6 +34,12 @@ async function ensureApproval(signer, token, amount) {
 	}
 }
 
+
+async function findPoolForTokens(token0, token1) {
+	const factory = new ethers.Contract(FACTORY_ADDRESS, poolFactoryAbi, signer.provider);
+	return await factory.getPool(token0, token1, FEE_TIER);
+}
+
 /**
  * Estimates output or input for swap with slippage margin.
  */

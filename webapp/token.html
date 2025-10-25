@@ -70,6 +70,7 @@
 	<script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
 	<script src="contracts.js"></script>
 	<script src="tokens.js"></script>
+	<script src="pools.js"></script>
 	<script src="swaps.js"></script>
 	<script src="app.js"></script>
 
@@ -152,6 +153,8 @@ input[type=number] {
 		{ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', label: 'USDC' }
 	];
 
+	let poolAddress = null;
+
 	// Helper: populate a select with token options
 	function populateDropdown(selectEl, tokens, selectedAddr) {
 		selectEl.innerHTML = '';
@@ -185,6 +188,39 @@ input[type=number] {
 	swapTokenIn.addEventListener('change', () => addTokenIfMissing(swapTokenIn, swapTokenIn.value));
 	swapTokenOut.addEventListener('change', () => addTokenIfMissing(swapTokenOut, swapTokenOut.value));
 
+	await checkWalletConnection();
+	poolAddress = await findPoolForTokens(tokenPageAddress, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
+
+	// If user is pool owner, add fee collection button
+	try {
+		const owner = await getPoolOwner(poolAddress);
+		if (owner && account && owner.toLowerCase() === account.toLowerCase()) {
+			const collectBtn = document.createElement('button');
+			collectBtn.innerText = 'Collect Fees';
+			collectBtn.id = 'collect-fees';
+			collectBtn.addEventListener('click', async () => {
+				swapStatus.innerText = 'Collecting fees...';
+				try {
+					const tx = await collectFees(
+						signer,
+						poolAddress,
+						account,
+						-887272,
+						887272,
+						0x80000000000000000000000000000000n,
+						0x80000000000000000000000000000000n
+					);
+					swapStatus.innerText = 'Fees collected!';
+				} catch (err) {
+					swapStatus.innerText = 'Fee collection failed: ' + err.message;
+				}
+			});
+			document.getElementById('token-details').insertAdjacentElement('afterend', collectBtn);
+		}
+	} catch (err) {
+		console.warn('Owner check failed:', err);
+	}
+
 	// Debounced output estimation
 	let debounceTimer;
 	function debouncedEstimate() {
@@ -202,9 +238,11 @@ input[type=number] {
 		}
 
 		try {
-			const amountInRaw = ethers.utils.parseUnits(amountIn.toString(), inAddr === tokenPageAddress ? 18 : 6);
+			const decimalsIn = await getTokenDecimals(inAddr);
+			const decimalsOut = await getTokenDecimals(outAddr);
+			const amountInRaw = ethers.utils.parseUnits(amountIn.toString(), decimalsIn);
 			const { poolAddress, zeroForOne, tokensIn, tokensOut } = await estimateSwap(signer, inAddr, outAddr, amountInRaw);
-			const decimalsOut = outAddr === tokenPageAddress ? 18 : 6;
+			swapAmountIn.value = ethers.utils.formatUnits(tokensIn, decimalsIn);
 			swapAmountOut.value = ethers.utils.formatUnits(tokensOut, decimalsOut);
 		} catch (err) {
 			swapAmountOut.value = '';
@@ -250,8 +288,10 @@ input[type=number] {
 		swapButton.disabled = true;
 		swapStatus.innerText = 'Swapping...';
 		try {
-			const amountInRaw = ethers.utils.parseUnits(amountIn.toString(), inAddr === tokenPageAddress ? 18 : 6);
-			const amountOutMin = ethers.utils.parseUnits(amountIn.toString(), inAddr === tokenPageAddress ? 18 : 6);
+			const decimalsIn = await getTokenDecimals(inAddr);
+			const decimalsOut = await getTokenDecimals(outAddr);
+			const amountInRaw = ethers.utils.parseUnits(amountIn.toString(), decimalsIn);
+			const amountOutMin = ethers.utils.parseUnits(amountOut.toString(), decimalsOut);
 			const tx = await executeSwap(signer, inAddr, outAddr, amountInRaw, amountOutMin, true);
 			await tx.wait();
 			swapStatus.innerText = 'Swap successful!';

@@ -321,9 +321,9 @@ async function loadData() {
 		}
 
 	} else if (path.endsWith('mytokens.html')) {
-		if (!account) return;
+		if (!account)
+		    await connectWallet();
 		const myTokenList = document.getElementById('my-token-list');
-		if (!myTokenList) return;
 		myTokenList.innerHTML = '';
 		showSpinner(true);
 
@@ -637,20 +637,6 @@ async function loadData() {
 		} finally {
 			showSpinner(false);
 		}
-	}
-}
-
-async function collectFees(tokenName) {
-	if (!signer) return;
-	showSpinner(true);
-	try {
-		// Call collect fees from contracts.js
-		const tx = await collectTokenFees(tokenName);
-		await tx.wait();
-	} catch (err) {
-		showError(err.message);
-	} finally {
-		showSpinner(false);
 	}
 }
 
