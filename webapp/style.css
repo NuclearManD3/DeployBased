@@ -250,3 +250,21 @@ button[type="submit"]:hover::after {
 	100% { background-position: 0% 50%; }
 }
 
+.ext-link {
+	color: #4aa3ff;
+	text-decoration: none;
+}
+.ext-link:hover {
+	text-decoration: underline;
+}
+.copy-btn {
+	background: none;
+	border: none;
+	color: #aaa;
+	cursor: pointer;
+	margin-left: 6px;
+	padding: 2px;
+}
+.copy-btn:hover {
+	color: #fff;
+}

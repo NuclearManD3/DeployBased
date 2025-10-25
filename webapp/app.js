@@ -606,14 +606,58 @@ async function loadData() {
 				tokenContract.owner()
 			]);
 
+			function makeAddressHTML(label, addr) {
+				const shortAddr = addr.slice(0, 6) + '...' + addr.slice(-4);
+				const link = `https://basescan.org/address/${addr}`;
+				return `
+					<p><strong>${label}:</strong>
+						<a href="${link}" target="_blank" class="ext-link">
+							${shortAddr}
+							<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" style="margin-left:3px;vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+								<polyline points="15 3 21 3 21 9" />
+								<line x1="10" y1="14" x2="21" y2="3" />
+							</svg>
+						</a>
+						<button class="copy-btn" data-addr="${addr}" title="Copy address">
+							<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+								<path d="M5 15H4a2 2 0 0 1-2-2V4
+									a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+							</svg>
+						</button>
+					</p>
+				`;
+			}
+
 			tokenNameElem.innerText = `${symbol} Token`;
 			tokenDetailsElem.innerHTML = `
+				${makeAddressHTML('Address', tokenAddress)}
 				<p><strong>Name:</strong> ${name}</p>
 				<p><strong>Symbol:</strong> ${symbol}</p>
 				<p><strong>Decimals:</strong> ${decimals}</p>
 				<p><strong>Total Supply:</strong> ${ethers.utils.formatUnits(totalSupply, decimals)}</p>
-				<p><strong>Owner:</strong> ${ownerAddr}</p>
+				${makeAddressHTML('Owner', ownerAddr)}
 			`;
+
+			// Copy buttons
+			document.querySelectorAll('.copy-btn').forEach(btn => {
+				btn.addEventListener('click', async () => {
+					try {
+						await navigator.clipboard.writeText(btn.dataset.addr);
+						btn.innerHTML = '✓';
+						setTimeout(() => {
+							btn.innerHTML = `
+								<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+									<path d="M5 15H4a2 2 0 0 1-2-2V4 a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+								</svg>`;
+						}, 1000);
+					} catch (err) {
+						console.error('Copy failed:', err);
+					}
+				});
+			});
 
 		} catch (err) {
 			console.error('Error loading token:', err);
