@@ -322,3 +322,81 @@ button[type="submit"]:hover::after {
 	color: #eee;
 	font-size: 1rem;
 }
+
+
+
+// CONSIDER MERGING THE FOLLOWING WITH THE MAIN PAGE TOKEN LIST
+
+/* --------- My Token Cards --------- */
+#my-token-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 1rem;
+	margin-top: 1rem;
+}
+
+.token-card {
+	background-color: var(--bg-card);
+	border: 1px solid var(--border-color);
+	border-radius: var(--radius);
+	padding: 1rem 1.2rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.token-card:hover {
+	transform: translateY(-3px);
+	box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+}
+
+.token-card a.token-link {
+	font-weight: 600;
+	font-size: 1.05rem;
+	color: var(--text-light);
+	text-decoration: none;
+}
+
+.token-card a.token-link:hover {
+	color: var(--accent);
+}
+
+.token-card .explorer-link {
+	font-size: 0.85rem;
+	color: var(--accent);
+	text-decoration: none;
+}
+
+.token-card .explorer-link:hover {
+	text-decoration: underline;
+}
+
+.token-card .actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-top: 0.5rem;
+}
+
+.token-card .actions button {
+	background: var(--accent);
+	color: white;
+	border: none;
+	padding: 0.4rem 0.8rem;
+	border-radius: var(--radius);
+	cursor: pointer;
+	font-weight: 500;
+	transition: background var(--transition), transform var(--transition);
+}
+
+.token-card .actions button:hover {
+	background: var(--accent-hover);
+	transform: translateY(-1px);
+}
+
+.token-card .info {
+	font-size: 0.8rem;
+	color: var(--text-dim);
+	margin-left: auto;
+}
