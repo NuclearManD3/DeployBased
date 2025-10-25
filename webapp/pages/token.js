@@ -166,3 +166,54 @@
 		}
 	});
 })();
+
+(async () => {
+	const params = new URLSearchParams(window.location.search);
+	const tokenAddress = params.get('address');
+	if (!tokenAddress) return;
+
+	const tokenNameElem = document.getElementById('token-name');
+	const tokenDetailsElem = document.getElementById('token-details');
+
+	tokenNameElem.innerText = 'Loading...';
+	tokenDetailsElem.innerHTML = '';
+	showSpinner(true);
+
+	try {
+		const [name, symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
+			getTokenName(tokenAddress),
+			getTokenSymbol(tokenAddress),
+			getTokenDecimals(tokenAddress),
+			getTokenSupply(tokenAddress),
+			getPoolOwner(tokenAddress) // updated to use pool.js
+		]);
+
+		tokenNameElem.innerText = `${symbol} Token`;
+		tokenDetailsElem.innerHTML = `
+			${makeAddressHTML('Address', tokenAddress, "https://basescan.org/token/")}
+			<p><strong>Name:</strong> ${name}</p>
+			<p><strong>Symbol:</strong> ${symbol}</p>
+			<p><strong>Decimals:</strong> ${decimals}</p>
+			<p><strong>Total Supply:</strong> ${totalSupply}</p>
+			${makeAddressHTML('Owner', ownerAddr)}
+			${account && account.toLowerCase() === ownerAddr.toLowerCase() ? '<button onclick="collectPoolFees(\''+tokenAddress+'\')">Collect Pool Fees</button>' : ''}
+		`;
+
+		document.querySelectorAll('.copy-btn').forEach(btn => {
+			btn.addEventListener('click', async () => {
+				try {
+					await navigator.clipboard.writeText(btn.dataset.addr);
+					btn.innerText = '✓';
+					setTimeout(() => { btn.innerText = 'Copy'; }, 1000);
+				} catch {}
+			});
+		});
+
+	} catch (err) {
+		console.error('Error loading token:', err);
+		tokenNameElem.innerText = 'Error';
+		tokenDetailsElem.innerHTML = 'Could not fetch token info.';
+	} finally {
+		showSpinner(false);
+	}
+})();

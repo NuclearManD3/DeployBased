@@ -65,6 +65,30 @@ async function connectWallet() {
 	}
 }
 
+function makeAddressHTML(label, addr, root = "https://basescan.org/address/") {
+    const shortAddr = addr.slice(0, 6) + '...' + addr.slice(-4);
+    const link = root + addr;
+    return `
+        <p><strong>${label}:</strong>
+            <a href="${link}" target="_blank" class="ext-link">
+                ${shortAddr}
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" style="margin-left:3px;vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+            </a>
+            <button class="copy-btn" data-addr="${addr}" title="Copy address">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4
+                        a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </button>
+        </p>
+    `;
+}
+
 async function checkWalletConnection() {
 	if (!window.ethereum) return;
 
@@ -302,9 +326,7 @@ async function loadData() {
 	if (alreadyLoaded) return;
 	alreadyLoaded = true;
 	const path = window.location.pathname;
-	if (path.endsWith('index.html') || path === '/' || path === '') {
-		await renderTokenList();
-	} else if (path.endsWith('about.html')) {
+	if (path.endsWith('about.html')) {
 		const totalTokensElem = document.getElementById('total-tokens');
 		if (!totalTokensElem) return;
 
@@ -318,324 +340,6 @@ async function loadData() {
 		} catch (err) {
 			console.warn('Failed to fetch total token count:', err);
 			totalTokensElem.innerText = '?';
-		}
-
-	} else if (path.endsWith('mytokens.html')) {
-		if (!account)
-		    await connectWallet();
-		const myTokenList = document.getElementById('my-token-list');
-		myTokenList.innerHTML = '';
-		showSpinner(true);
-
-		try {
-			const readProvider = await getReadProvider();
-			const factoryAddress = factoryAddresses[currentNetwork];
-			if (!factoryAddress) {
-				myTokenList.innerHTML = '<div class="token-item">Factory not configured.</div>';
-				return;
-			}
-
-			const factory = new ethers.Contract(factoryAddress, factoryAbi, readProvider);
-			const totalBN = await factory.totalTokens();
-			const total = Math.min(totalBN.toNumber(), MAX_TOKENS_FETCH);
-			const owned = [];
-
-			for (let i = 0; i < total; i++) {
-				const addr = await factory.tokens(i);
-
-				let symbol = '', name = '', ownerAddr = '';
-				try { symbol = await getTokenSymbol(addr); } catch {}
-				try { name = await getTokenName(addr); } catch {}
-				try { ownerAddr = await getTokenOwner(addr); } catch {}
-
-				if (ownerAddr.toLowerCase() === account.toLowerCase()) {
-					owned.push({
-						address: addr,
-						name: name || symbol || 'Unknown',
-						symbol
-					});
-				}
-			}
-
-			if (!owned.length) {
-				myTokenList.innerHTML = '<div class="token-item">You do not own any tokens.</div>';
-			} else {
-				owned.forEach(tok => {
-					const item = document.createElement('div');
-					item.classList.add('token-item');
-					item.innerHTML = `
-						${tok.name} (${tok.symbol})<br>
-						<button onclick="collectFees('${tok.address}')">Collect Fees</button>
-					`;
-					myTokenList.appendChild(item);
-				});
-			}
-
-		} catch (err) {
-			console.error('Error loading my tokens:', err);
-			myTokenList.innerHTML = '<div class="token-item">Error fetching your tokens.</div>';
-		} finally {
-			showSpinner(false);
-		}
-	} else if (path.endsWith('deploy.html')) {
-		// Update slider displays
-		const marketCapInput = document.getElementById('initial-market-cap');
-		const liquidityInput = document.getElementById('liquidity-assistance');
-		const purchaseInput = document.getElementById('tokens-to-purchase');
-
-		// Reserve token change
-		const reserveSelect = document.getElementById('reserve-token');
-		reserveSelect.addEventListener('change', (e) => {
-			const liqInput = document.getElementById('liquidity-assistance');
-			if (e.target.value === 'WETH') {
-				liqInput.value = '2';
-			} else {
-				liqInput.value = '10000';
-			}
-		});
-
-		// Interdependent fields logic
-		const startingPrice = document.getElementById('starting-price');
-		const totalSupply = document.getElementById('total-supply');
-		const marketCap = document.getElementById('initial-market-cap');
-		const transitionPrice = document.getElementById('transition-price');
-		const linearLimit = document.getElementById('liquidity-assistance');
-
-		// Store initial ratios
-		let transitionRatio = parseFloat(transitionPrice.value) / parseFloat(startingPrice.value);
-		let linearRatio = parseFloat(linearLimit.value) / parseFloat(marketCap.value);
-
-		// Utility: scale all dependent fields proportionally
-		function scaleAllFields(scaleFactor, updated) {
-			const oldPrice = parseFloat(startingPrice.value);
-			const oldCap = parseFloat(marketCap.value);
-
-			// Scale starting price and total supply proportionally
-			const newPrice = oldPrice * scaleFactor;
-			const newSupply = (oldCap / newPrice).toFixed(6); // preserve mcap invariant
-
-			if (startingPrice != updated) startingPrice.value = newPrice.toFixed(6);
-			if (totalSupply != updated) totalSupply.value = newSupply;
-
-			// Maintain invariant
-			const newCap = (newPrice * newSupply).toFixed(2);
-			if (marketCap != updated) marketCap.value = newCap;
-
-			// Scale proportional fields
-			transitionPrice.value = (newPrice * transitionRatio).toFixed(6);
-			linearLimit.value = (newCap * linearRatio).toFixed(0);
-		}
-
-		// Event listeners
-		startingPrice.addEventListener('input', () => {
-			const oldPrice = parseFloat(startingPrice.dataset.prev || startingPrice.value);
-			const newPrice = parseFloat(startingPrice.value);
-			if (!isNaN(oldPrice) && !isNaN(newPrice)) {
-				const scaleFactor = newPrice / oldPrice;
-				scaleAllFields(scaleFactor, startingPrice);
-				startingPrice.dataset.prev = newPrice;
-			}
-		});
-
-		totalSupply.addEventListener('input', () => {
-			const oldSupply = parseFloat(totalSupply.dataset.prev || totalSupply.value);
-			const newSupply = parseFloat(totalSupply.value);
-			if (!isNaN(oldSupply) && !isNaN(newSupply)) {
-				const scaleFactor = newSupply / oldSupply;
-				scaleAllFields(scaleFactor, totalSupply);
-				totalSupply.dataset.prev = newSupply;
-			}
-		});
-
-		marketCap.addEventListener('input', () => {
-			const oldCap = parseFloat(marketCap.dataset.prev || marketCap.value);
-			const newCap = parseFloat(marketCap.value);
-			if (!isNaN(oldCap) && !isNaN(newCap)) {
-				const scaleFactor = newCap / oldCap;
-				scaleAllFields(scaleFactor, marketCap);
-				marketCap.dataset.prev = newCap;
-			}
-		});
-
-		transitionPrice.addEventListener('input', () => {
-			const price = parseFloat(startingPrice.value);
-			const trans = parseFloat(transitionPrice.value);
-			if (!isNaN(price) && !isNaN(trans)) {
-				transitionRatio = trans / price;
-			}
-		});
-
-		linearLimit.addEventListener('input', () => {
-			const cap = parseFloat(marketCap.value);
-			const liq = parseFloat(linearLimit.value);
-			if (!isNaN(cap) && !isNaN(liq)) {
-				linearRatio = liq / cap;
-			}
-		});
-
-		// Initialize prev values
-		startingPrice.dataset.prev = startingPrice.value;
-		totalSupply.dataset.prev = totalSupply.value;
-		marketCap.dataset.prev = marketCap.value;
-
-		purchaseInput.addEventListener('input', (e) => {
-			document.getElementById('tokens-to-purchase-value').innerText = `${e.target.value}%`;
-		});
-
-		document.getElementById('deploy-form').addEventListener('submit', async (e) => {
-			e.preventDefault();
-			if (!signer) {
-				showError('Connect wallet first');
-				return;
-			}
-			showSpinner(true);
-			try {
-				// Gather form values
-				const name = document.getElementById('token-name').value;
-				const symbol = document.getElementById('token-symbol').value;
-				const decimals = parseInt(document.getElementById('decimals').value);
-				const totalSupply = ethers.utils.parseUnits(document.getElementById('total-supply').value, decimals);
-
-				const startPriceRaw = parseFloat(document.getElementById('starting-price').value);
-				const switchPriceRaw = parseFloat(document.getElementById('transition-price').value);
-
-				const reserveTokenSymbol = document.getElementById('reserve-token').value;
-				const reserveAddress = tokenAddresses[currentNetwork + reserveTokenSymbol];
-				const reserveDecimals = tokenDecimals[currentNetwork + reserveTokenSymbol];
-
-				const curveLimit = ethers.utils.parseUnits(document.getElementById('liquidity-assistance').value, reserveDecimals);
-				const tokensToPurchasePercent = parseFloat(document.getElementById('tokens-to-purchase').value);
-				const fee = 10000;
-				const amountToPurchase = totalSupply.mul(Math.floor(tokensToPurchasePercent * 100)).div(10000); // convert % to fraction
-
-				// Convert prices to raw units according to both token decimals
-				function toRawPrice(price, launchDecimals, reserveDecimals) {
-					// 128.128 fixed-point, but scaled to integer: price * 10**reserveDecimals / 10**launchDecimals
-					return ethers.BigNumber.from(Math.floor(price * 10 ** reserveDecimals))
-						.mul(ethers.BigNumber.from(2).pow(128))
-						.div(ethers.BigNumber.from(10).pow(launchDecimals));
-				}
-
-				const startPrice = toRawPrice(startPriceRaw, decimals, reserveDecimals);
-				const switchPrice = toRawPrice(switchPriceRaw, decimals, reserveDecimals);
-
-				const twoPow128 = ethers.BigNumber.from(2).pow(128);
-				const dy = twoPow128.mul(curveLimit).div(startPrice.add(switchPrice));
-				const y1 = totalSupply.sub(dy);
-				const reserveOffset = switchPrice.mul(y1).div(twoPow128).sub(curveLimit);
-				console.log(twoPow128, dy, y1, reserveOffset);
-
-				// Connect to factory
-				const factoryAddress = factoryAddresses[currentNetwork];
-				if (!factoryAddress) throw new Error('Factory not configured for this network');
-				const factory = new ethers.Contract(factoryAddress, factoryAbi, signer);
-
-				console.log(startPrice, switchPrice, curveLimit, reserveOffset, totalSupply);
-
-				// Send transaction
-				const tx = await factory.launchToken(
-					name,
-					symbol,
-					decimals,
-					reserveAddress,
-					fee,
-					startPrice,
-					switchPrice,
-					curveLimit,
-					reserveOffset,
-					totalSupply
-				);
-				const receipt = await tx.wait();
-
-				const { token, _1, _2, _3 } = receipt.events.find(e => e.event === 'TokenCreated')?.args || {};
-
-				window.location.href = `token.html?address=${token}`;
-			} catch (err) {
-				showError(err.message);
-			} finally {
-				showSpinner(false);
-			}
-		});
-	} else if (path.endsWith('token.html')) {
-		const params = new URLSearchParams(window.location.search);
-		const tokenAddress = params.get('address');
-		if (!tokenAddress) return;
-
-		const tokenNameElem = document.getElementById('token-name');
-		const tokenDetailsElem = document.getElementById('token-details');
-
-		tokenNameElem.innerText = 'Loading...';
-		tokenDetailsElem.innerHTML = '';
-		showSpinner(true);
-
-		try {
-			const [name, symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
-				getTokenName(tokenAddress),
-				getTokenSymbol(tokenAddress),
-				getTokenDecimals(tokenAddress),
-				getTokenSupply(tokenAddress),
-				getTokenOwner(tokenAddress)
-			]);
-
-			function makeAddressHTML(label, addr) {
-				const shortAddr = addr.slice(0, 6) + '...' + addr.slice(-4);
-				const link = `https://basescan.org/address/${addr}`;
-				return `
-					<p><strong>${label}:</strong>
-						<a href="${link}" target="_blank" class="ext-link">
-							${shortAddr}
-							<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" style="margin-left:3px;vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-								<polyline points="15 3 21 3 21 9" />
-								<line x1="10" y1="14" x2="21" y2="3" />
-							</svg>
-						</a>
-						<button class="copy-btn" data-addr="${addr}" title="Copy address">
-							<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-								<path d="M5 15H4a2 2 0 0 1-2-2V4
-									a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-							</svg>
-						</button>
-					</p>
-				`;
-			}
-
-			tokenNameElem.innerText = `${symbol} Token`;
-			tokenDetailsElem.innerHTML = `
-				${makeAddressHTML('Address', tokenAddress)}
-				<p><strong>Name:</strong> ${name}</p>
-				<p><strong>Symbol:</strong> ${symbol}</p>
-				<p><strong>Decimals:</strong> ${decimals}</p>
-				<p><strong>Total Supply:</strong> ${totalSupply}</p>
-				${makeAddressHTML('Owner', ownerAddr)}
-			`;
-
-			// Copy buttons
-			document.querySelectorAll('.copy-btn').forEach(btn => {
-				btn.addEventListener('click', async () => {
-					try {
-						await navigator.clipboard.writeText(btn.dataset.addr);
-						btn.innerHTML = '✓';
-						setTimeout(() => {
-							btn.innerHTML = `
-								<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-									<path d="M5 15H4a2 2 0 0 1-2-2V4 a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-								</svg>`;
-						}, 1000);
-					} catch (err) {
-						console.error('Copy failed:', err);
-					}
-				});
-			});
-
-		} catch (err) {
-			console.error('Error loading token:', err);
-			tokenNameElem.innerText = 'Error';
-			tokenDetailsElem.innerHTML = 'Could not fetch token info.';
-		} finally {
-			showSpinner(false);
 		}
 	}
 }
