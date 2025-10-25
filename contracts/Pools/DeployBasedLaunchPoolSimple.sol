@@ -113,6 +113,8 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 	}
 
 	function invertPrice128(uint256 price) internal pure returns (uint256) {
+		if (price < 2)
+			price = 2;
 		return Math.mulDiv(0x100000000000000000000000000000000, 0x100000000000000000000000000000000, price);
 	}
 

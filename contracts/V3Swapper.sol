@@ -45,7 +45,7 @@ contract SwapperV3 {
 		swapper = msg.sender;
 		expectedPoolAddress = pool;
 		limits = uint256(minimum) | (amountIn << 128);
-		uint160 ratio = zeroForOne ? 0x1000276FF : 0x00fffd8963efd1fc6a506488495d951d5263988d00;
+		uint160 ratio = zeroForOne ? 0x1000000000 : 0x00fffd8963efd1fc6a506488495d951d5263988d00;
 		IUniswapV3Pool(pool).swap(msg.sender, zeroForOne, int256(amountIn), ratio, "");
 	}
 
@@ -53,7 +53,7 @@ contract SwapperV3 {
 		swapper = msg.sender;
 		expectedPoolAddress = pool;
 		limits = amountOut | (uint256(maximum) << 128);
-		uint160 ratio = zeroForOne ? 0x1000276FF : 0x00fffd8963efd1fc6a506488495d951d5263988d00;
+		uint160 ratio = zeroForOne ? 0x1000000000 : 0x00fffd8963efd1fc6a506488495d951d5263988d00;
 		IUniswapV3Pool(pool).swap(msg.sender, zeroForOne, -int256(amountOut), ratio, "");
 	}
 }
