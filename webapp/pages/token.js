@@ -210,15 +210,18 @@
 			});
 		});
 
+		// Draw the chart
+		reserves = await getPoolReserves(poolAddress);
+		curve = await getPoolCurve(poolAddress);
         createPoolPriceWidget('chart-container', {
-            totalSupply: getTokenSupply(tokenAddress),
-            tokenPriceUSD: 0.000011,
-            currentPrice: 0.000011,
-            currentInvestment: 1000,
-            p0: 0.00001,
-            curveLimit: 1000,
-            M: 1e-9,
-            b: 8952.381
+            totalSupply: await getTokenSupply(tokenAddress),
+            tokenPriceUSD: currentPrice,
+            currentPrice: currentPrice,
+            currentInvestment: reserves.reserve,
+            p0: curve.basePrice,
+            curveLimit: curve.curveLimit,
+            M: curve.multiple,
+            b: curve.reserveOffset
         });
 
 	} catch (err) {

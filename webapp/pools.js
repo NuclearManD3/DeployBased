@@ -19,7 +19,9 @@ async function _getPoolContract(address, signer = null) {
 		'function launch() view returns (address)',
 		'function computeExpectedTokensOut(address inputToken,uint256 maxTokensIn,uint160 sqrtPriceX96,uint160 sqrtPriceLimitX96) view returns (uint256 tokensIn,uint256 tokensOut,uint160 newSqrtPriceX96)',
 		'function computeExpectedTokensIn(address inputToken,uint256 maxTokensOut,uint160 sqrtPriceX96,uint160 sqrtPriceLimitX96) view returns (uint256 tokensIn,uint256 tokensOut,uint160 newSqrtPriceX96)',
-		'function owner() view returns (address)'
+		'function owner() view returns (address)',
+		'function curveParams() external view returns (uint256 minPrice, uint256 multiple, uint256 limit, uint256 offset)',
+		'function reserves() public view returns (uint128 r0, uint128 r1)'
 	];
 	if (signer == null)
 		signer = await getReadProvider();
@@ -56,6 +58,26 @@ async function getPoolToken1(address) {
 	return token1;
 }
 
+async function getPoolReserveToken(address) {
+	address = address.toLowerCase();
+	if (poolCache[address]?.reserve) return poolCache[address].reserve;
+	const pool = await _getPoolContract(address);
+	const reserve = await pool.reserve();
+	poolCache[address] = { ...(poolCache[address] || {}), reserve };
+	savePoolCache();
+	return reserve;
+}
+
+async function getPoolLaunchToken(address) {
+	address = address.toLowerCase();
+	if (poolCache[address]?.launch) return poolCache[address].launch;
+	const pool = await _getPoolContract(address);
+	const launch = await pool.launch();
+	poolCache[address] = { ...(poolCache[address] || {}), launch };
+	savePoolCache();
+	return launch;
+}
+
 async function getPoolFee(address) {
 	address = address.toLowerCase();
 	if (poolCache[address]?.fee) return poolCache[address].fee;
@@ -66,7 +88,7 @@ async function getPoolFee(address) {
 	return fee;
 }
 
-// Converts sqrtPriceX96 to normal price, adjusted for token decimals
+// Converts sqrtPriceX96 to normal price, adjusted for token decimals and converted to reserve/launch
 async function getCurrentPrice(address) {
 	const pool = await _getPoolContract(address);
 	const [token0, token1] = await Promise.all([
@@ -88,6 +110,67 @@ async function getCurrentPrice(address) {
 		adjusted = 1 / adjusted;
 
 	return Math.round(adjusted * 100000000) / 100000000;
+}
+
+// Converts sqrtPriceX96 to normal price, adjusted for token decimals and converted to reserve/launch
+async function getPoolReserves(address) {
+	const pool = await _getPoolContract(address);
+	const reservesRaw = await pool.reserves();
+	const [token0, token1] = await Promise.all([
+		getPoolToken0(address),
+		getPoolToken1(address)
+	]);
+	const [dec0, dec1] = await Promise.all([
+		getTokenDecimals(token0),
+		getTokenDecimals(token1)
+	]);
+
+	if (await getPoolReserveToken(address) == token1)
+		return {
+			reserve: reservesRaw.r1 / (10 ** dec1),
+			launch: reservesRaw.r0 / (10 ** dec0)
+		};
+	else
+		return {
+			reserve: reservesRaw.r0 / (10 ** dec0),
+			launch: reservesRaw.r1 / (10 ** dec1)
+		};
+}
+
+async function getPoolCurve(address) {
+	address = address.toLowerCase();
+	if (poolCache[address]?.curve) return poolCache[address].curve;
+
+	const pool = await _getPoolContract(address);
+	const [reserve, launch] = await Promise.all([
+		getPoolReserveToken(address),
+		getPoolLaunchToken(address)
+	]);
+	const [dec0, dec1] = await Promise.all([
+		getTokenDecimals(reserve),
+		getTokenDecimals(launch)
+	]);
+	let curve = await pool.curveParams();
+
+	const minPriceRaw = curve.minPrice;
+	let basePrice = (2 ** 128) * (10 ** (dec1 - dec0)) / minPriceRaw;
+
+	const multiple = curve.limit * curve.multiple / (2 ** 128);
+
+	const curveLimit = curve.limit / (10 ** dec0);
+
+	const reserveOffset = curve.offset / (10 ** dec0);
+
+	curve = {
+		basePrice,
+		multiple,
+		curveLimit,
+		reserveOffset
+	}
+	//poolCache[address] = { ...(poolCache[address] || {}), curve };
+	//savePoolCache();
+	console.log(curve);
+	return curve;
 }
 
 async function getFeePercent(address) {

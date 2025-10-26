@@ -357,7 +357,7 @@ async function createPoolPriceWidget(containerId, params) {
 	let maxX = params.curveLimit * 10; // arbitrary max for xy=K portion
 	const yAtLimit = supply - params.curveLimit / (params.p0 + params.M * params.curveLimit / 2)
 	const K = (params.curveLimit + params.b) * yAtLimit;
-	console.log(yAtLimit, K);
+	console.log(supply, params.curveLimit, params.p0, params.M, yAtLimit, K);
 
 	// Linear portion
 	for (let dx = 0; dx <= params.curveLimit; dx += step) {
