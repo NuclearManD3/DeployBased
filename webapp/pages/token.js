@@ -208,7 +208,7 @@
 			});
 		});
 
-        createPoolPriceWidget('pool-widget-container', {
+        createPoolPriceWidget('chart-container', {
             tokenAddress: tokenAddress,
             tokenPriceUSD: 1.25,
             currentPrice: 1.25,

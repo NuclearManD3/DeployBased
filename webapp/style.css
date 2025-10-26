@@ -112,8 +112,9 @@ button:hover {
 /* --------- Main Layout --------- */
 main {
 	padding: 3rem 2rem;
-	max-width: 800px;
 	margin: 0 auto;
+	margin-left: 10%;
+	margin-right: 10%;
 }
 
 h1 {

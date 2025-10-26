@@ -66,27 +66,27 @@ async function connectWallet() {
 }
 
 function makeAddressHTML(label, addr, root = "https://basescan.org/address/") {
-    //const shortAddr = addr.slice(0, 6) + '...' + addr.slice(-4);
-    const link = root + addr;
-    return `
-        <p><strong>${label}:</strong>
-            <a href="${link}" target="_blank" class="ext-link">
-                ${addr}
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" style="margin-left:3px;vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                    <polyline points="15 3 21 3 21 9" />
-                    <line x1="10" y1="14" x2="21" y2="3" />
-                </svg>
-            </a>
-            <button class="copy-btn" data-addr="${addr}" title="Copy address">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4
-                        a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-            </button>
-        </p>
-    `;
+	//const shortAddr = addr.slice(0, 6) + '...' + addr.slice(-4);
+	const link = root + addr;
+	return `
+		<p><strong>${label}:</strong>
+			<a href="${link}" target="_blank" class="ext-link">
+				${addr}
+				<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" style="margin-left:3px;vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+					<polyline points="15 3 21 3 21 9" />
+					<line x1="10" y1="14" x2="21" y2="3" />
+				</svg>
+			</a>
+			<button class="copy-btn" data-addr="${addr}" title="Copy address">
+				<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" style="vertical-align:middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+					<path d="M5 15H4a2 2 0 0 1-2-2V4
+						a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+				</svg>
+			</button>
+		</p>
+	`;
 }
 
 function renderTokenCard(tok) {
@@ -122,7 +122,7 @@ function renderTokenCard(tok) {
 }
 
 async function renderList(container, generator, renderItem) {
-    // clear container
+	// clear container
 	container.innerHTML = '';
 	showSpinner(true);
 
@@ -330,129 +330,82 @@ async function renderTokenList() {
 //   p0, curveLimit, M, b, getTokenSupplyFn (async function returning token supply)
 // }
 async function createPoolPriceWidget(containerId, params) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
+	const container = document.getElementById(containerId);
+	if (!container) return;
 
-    // Clear previous content
-    container.innerHTML = '';
+	// Clear previous content
+	container.innerHTML = '';
 
-    // Market Cap display
-    const marketCapDiv = document.createElement('div');
-    marketCapDiv.style.marginBottom = '10px';
-    marketCapDiv.style.fontWeight = 'bold';
-    container.appendChild(marketCapDiv);
+	// Market Cap display
+	const marketCapDiv = document.createElement('div');
+	marketCapDiv.style.marginBottom = '10px';
+	marketCapDiv.style.fontWeight = 'bold';
+	container.appendChild(marketCapDiv);
 
-    const supply = await getTokenSupply(params.tokenAddress);
-    const marketCap = supply * params.tokenPriceUSD;
-    marketCapDiv.innerText = `Market Cap: $${marketCap.toLocaleString(undefined, {maximumFractionDigits:2})}`;
+	const supply = await getTokenSupply(params.tokenAddress);
+	const marketCap = supply * params.tokenPriceUSD;
+	marketCapDiv.innerText = `Market Cap: $${marketCap.toLocaleString(undefined, {maximumFractionDigits:2})}`;
 
-    // Canvas for graph
-    const canvas = document.createElement('canvas');
-    canvas.width = 500;
-    canvas.height = 300;
-    canvas.style.border = '1px solid #333';
-    container.appendChild(canvas);
+	const chartDiv = document.createElement('div');
+	chartDiv.id = containerId + '_chart-container';
+	container.appendChild(chartDiv);
 
-    const ctx = canvas.getContext('2d');
-    const padding = 50;
+	// Calculate the price curve points
+	const xs = [];
+	const ys = [];
+	const step = params.curveLimit / 50; // linear segment steps
+	let maxX = params.curveLimit * 2; // arbitrary max for xy=K portion
+	const K = (params.curveLimit + params.b) * params.p0;
 
-    // Calculate the price curve points
-    const points = [];
-    const step = params.curveLimit / 50; // linear segment steps
-    let maxX = params.curveLimit * 2; // arbitrary max for xy=K portion
-    const K = (params.curveLimit + params.b) * params.p0;
+	// Linear portion
+	for (let x = 0; x <= params.curveLimit; x += step) {
+		const y = params.p0 + params.M * x;
+		xs.push(x);
+		ys.push(y);
+	}
 
-    // Linear portion
-    for (let x = 0; x <= params.curveLimit; x += step) {
-        const y = params.p0 + params.M * x;
-        points.push({x, y});
-    }
+	// xy=K portion
+	for (let x = params.curveLimit + step; x <= maxX; x += step) {
+		const y = K / (x + params.b);
+		xs.push(x);
+		ys.push(y);
+	}
 
-    // xy=K portion
-    for (let x = params.curveLimit + step; x <= maxX; x += step) {
-        const y = K / (x + params.b);
-        points.push({x, y});
-    }
+	var data = [ {
+		x: xs,
+		y: ys,
+		mode: 'lines',
+		name: 'Price',
+		line: {
+			color: 'rgb(64, 82, 219)',
+			width: 3
+		}
+	}, {
+		x: [params.currentInvestment],
+		y: [params.currentPrice],
+		name: "Current Price",
+		mode: 'markers',
+		type: 'scatter',
+		marker: {
+			size: 10,
+			color: "#FFFF00",
+			sizemode: 'area'
+		}
+	} ];
 
-    // Determine Y range
-    const allY = points.map(p => p.y);
-    const minY = Math.min(...allY, params.currentPrice * 0.9);
-    const maxY = Math.max(...allY, params.currentPrice * 1.5);
+	var layout = {
+		title: {text: 'Price vs Cumulative Purchases'},
+		plot_bgcolor: "#181a1f",
+		paper_bgcolor: "#181a1f",
+		text_color: "#D0D0F0",
+		font: {
+			family: 'sans serif',
+			size: 14,
+			color: "#C0C0F0"
+		},
+	};
 
-    // Determine X range
-    const minX = 0;
-    const maxXcanvas = Math.max(...points.map(p=>p.x), params.currentInvestment*1.5);
-
-    // Transform functions
-    function xToCanvas(x) {
-        return padding + ((x - minX) / (maxXcanvas - minX)) * (canvas.width - 2 * padding);
-    }
-    function yToCanvas(y) {
-        return canvas.height - padding - ((y - minY) / (maxY - minY)) * (canvas.height - 2 * padding);
-    }
-
-    // Draw axes
-    ctx.strokeStyle = '#aaa';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, canvas.height - padding);
-    ctx.lineTo(canvas.width - padding, canvas.height - padding);
-    ctx.stroke();
-
-    // Draw curve
-    ctx.strokeStyle = '#00ffff'; // electric blue
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    points.forEach((p, i) => {
-        const cx = xToCanvas(p.x);
-        const cy = yToCanvas(p.y);
-        if (i === 0) ctx.moveTo(cx, cy);
-        else ctx.lineTo(cx, cy);
-    });
-    ctx.stroke();
-
-    // Draw current price point
-    const curX = xToCanvas(params.currentInvestment);
-    const curY = yToCanvas(params.currentPrice);
-    ctx.fillStyle = '#ffff00'; // electric yellow
-    ctx.beginPath();
-    ctx.arc(curX, curY, 5, 0, 2*Math.PI);
-    ctx.fill();
-
-    // Info boxes
-    const infoDiv = document.createElement('div');
-    infoDiv.style.marginTop = '10px';
-    container.appendChild(infoDiv);
-
-    const priceHoverDiv = document.createElement('div');
-    const pctDiv = document.createElement('div');
-    const investDiv = document.createElement('div');
-    infoDiv.appendChild(priceHoverDiv);
-    infoDiv.appendChild(pctDiv);
-    infoDiv.appendChild(investDiv);
-
-    function updateInfo(inv, price) {
-        priceHoverDiv.innerText = `Price at investment ${inv.toFixed(2)}: ${price.toFixed(6)}`;
-        pctDiv.innerText = `Price change: ${((price / params.currentPrice - 1) * 100).toFixed(2)}%`;
-        investDiv.innerText = `Investment required from current: ${(inv - params.currentInvestment).toFixed(2)}`;
-    }
-
-    // Mouse interaction
-    canvas.addEventListener('mousemove', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        // map canvas X to investment
-        const invX = minX + ((mouseX - padding) / (canvas.width - 2*padding)) * (maxXcanvas - minX);
-        if (invX < minX || invX > maxXcanvas) return;
-
-        // Compute corresponding price on curve
-        let priceY;
-        if (invX <= params.curveLimit) priceY = params.p0 + params.M * invX;
-        else priceY = K / (invX + params.b);
-
-        updateInfo(invX, priceY);
-    });
+	Plotly.newPlot(chartDiv.id, data, layout);
 }
 
 
