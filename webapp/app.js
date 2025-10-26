@@ -354,21 +354,25 @@ async function createPoolPriceWidget(containerId, params) {
 	const xs = [];
 	const ys = [];
 	const step = params.curveLimit / 50; // linear segment steps
-	let maxX = params.curveLimit * 2; // arbitrary max for xy=K portion
-	const K = (params.curveLimit + params.b) * params.p0;
+	let maxX = params.curveLimit * 10; // arbitrary max for xy=K portion
+	const yAtLimit = supply - params.curveLimit / (params.p0 + params.M * params.curveLimit / 2)
+	const K = (params.curveLimit + params.b) * yAtLimit;
+	console.log(yAtLimit, K);
 
 	// Linear portion
-	for (let x = 0; x <= params.curveLimit; x += step) {
-		const y = params.p0 + params.M * x;
-		xs.push(x);
-		ys.push(y);
+	for (let dx = 0; dx <= params.curveLimit; dx += step) {
+		const price = params.p0 + params.M * dx;
+		xs.push(dx);
+		ys.push(price);
 	}
 
 	// xy=K portion
-	for (let x = params.curveLimit + step; x <= maxX; x += step) {
-		const y = K / (x + params.b);
-		xs.push(x);
-		ys.push(y);
+	for (let dx = params.curveLimit + step; dx <= maxX; dx += step) {
+		let vx = params.b + dx;
+		let y1 = K / vx;
+		const price = vx / y1;
+		xs.push(dx);
+		ys.push(price);
 	}
 
 	var data = [ {
