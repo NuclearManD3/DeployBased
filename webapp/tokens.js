@@ -29,7 +29,7 @@ async function _getTokenContract(address, signer=null) {
 	];
 	if (signer == null)
 	    signer = await getReadProvider();
-	return new ethers.Contract(address, abi, provider);
+	return new ethers.Contract(address, abi, signer);
 }
 
 async function _fetchTokenField(address, field) {
