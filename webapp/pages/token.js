@@ -196,7 +196,6 @@
 			<p><strong>Decimals:</strong> ${decimals}</p>
 			<p><strong>Total Supply:</strong> ${totalSupply}</p>
 			${makeAddressHTML('Owner', ownerAddr)}
-			${account && account.toLowerCase() === ownerAddr.toLowerCase() ? '<button onclick="collectPoolFees(\''+tokenAddress+'\')">Collect Pool Fees</button>' : ''}
 		`;
 
 		document.querySelectorAll('.copy-btn').forEach(btn => {
