@@ -25,21 +25,23 @@ contract DeployBasedTokenFactory is /*IDeployBasedTokenFactory,*/ Ownable {
 		poolFactory = _new;
 	}
 
-	function launchToken(string memory name, string memory symbol, uint8 decimals, address reserve, uint24 fee, uint256 startPrice, uint256 switchPrice, uint96 curveLimit, uint128 reserveOffset, uint128 amount)
+	function launchToken(string memory name, string memory symbol, string memory desc, uint8 decimals, address reserve, uint24 fee, uint256 startPrice, uint256 switchPrice, uint96 curveLimit, uint128 reserveOffset, uint128 amount)
 		external returns (address token, address pool)
 	{
-		address _factory = poolFactory;
-		token = address(new UniversalSafeERC20(name, symbol, decimals, address(this), amount));
-		IERC20(token).approve(_factory, amount);
-
 		{
-			uint96 priceMultiple = uint96(switchPrice - startPrice);
-			uint160 sqrtPriceX96 = uint160(token > reserve
-				? uint256(0x0010000000000000000000000000000000000000000) / Math.sqrt(startPrice)
-				: uint256(Math.sqrt(startPrice)) << 32);
+			address _factory = poolFactory;
+			token = address(new UniversalSafeERC20(name, symbol, desc, decimals, address(this), amount));
+			IERC20(token).approve(_factory, amount);
 
-			pool = IDeployBasedPoolFactory(_factory).createPool(reserve, token, fee, priceMultiple, sqrtPriceX96, curveLimit, reserveOffset, amount, msg.sender);
-			Ownable(token).transferOwnership(msg.sender);
+			{
+				uint96 priceMultiple = uint96(switchPrice - startPrice);
+				uint160 sqrtPriceX96 = uint160(token > reserve
+					? uint256(0x0010000000000000000000000000000000000000000) / Math.sqrt(startPrice)
+					: uint256(Math.sqrt(startPrice)) << 32);
+
+				pool = IDeployBasedPoolFactory(_factory).createPool(reserve, token, fee, priceMultiple, sqrtPriceX96, curveLimit, reserveOffset, amount, msg.sender);
+				Ownable(token).transferOwnership(msg.sender);
+			}
 		}
 
 		unchecked {

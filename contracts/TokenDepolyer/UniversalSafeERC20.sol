@@ -21,13 +21,19 @@ import "../interfaces/ISafeERC20Callbacks.sol";
 contract UniversalSafeERC20 is BasicERC20, Ownable, ISafeERC20Callbacks {
 	address public immutable factory;
 	address public implementation;
+	string public description;
 
-	constructor(string memory name, string memory symbol, uint8 decimals, address _factory, uint256 totalSupply)
+	constructor(string memory name, string memory symbol, string memory desc, uint8 decimals, address _factory, uint256 totalSupply)
 		BasicERC20(name, symbol, decimals)
 	{
+		description = desc;
 		factory = _factory;
 		implementation = address(0);
 		_mint(msg.sender, totalSupply);
+	}
+
+	function setDescription(string calldata desc) external onlyOwner {
+		description = desc;
 	}
 
 	/*
