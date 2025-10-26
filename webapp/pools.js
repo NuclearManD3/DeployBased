@@ -82,10 +82,12 @@ async function getCurrentPrice(address) {
 
 	// Price = (sqrtPriceX96 / 2^96)^2 * (10^(dec0 - dec1))
 	const ratio = (Number(sqrtPriceX96) / (2 ** 96)) ** 2;
-	const adjusted = ratio * (10 ** (dec0 - dec1));
+	let adjusted = ratio * (10 ** (dec0 - dec1));
 
-	// Assuming reserve = token0, launch = token1
-	return adjusted;
+	if (await getPoolReserveToken(address) == token0)
+		adjusted = 1 / adjusted;
+
+	return Math.round(adjusted * 100000000) / 100000000;
 }
 
 async function getFeePercent(address) {
