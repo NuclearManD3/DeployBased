@@ -326,8 +326,8 @@ async function renderTokenList() {
 // Generates a pool price/slippage widget
 // containerId: ID of container div
 // params: {
-//   tokenAddress, tokenPriceUSD, currentPrice, currentInvestment,
-//   p0, curveLimit, M, b, getTokenSupplyFn (async function returning token supply)
+//   totalSupply, tokenPriceUSD, currentPrice, currentInvestment,
+//   p0, curveLimit, M, b
 // }
 async function createPoolPriceWidget(containerId, params) {
 	const container = document.getElementById(containerId);
@@ -342,7 +342,7 @@ async function createPoolPriceWidget(containerId, params) {
 	marketCapDiv.style.fontWeight = 'bold';
 	container.appendChild(marketCapDiv);
 
-	const supply = await getTokenSupply(params.tokenAddress);
+	const supply = params.totalSupply;
 	const marketCap = supply * params.tokenPriceUSD;
 	marketCapDiv.innerText = `Market Cap: $${marketCap.toLocaleString(undefined, {maximumFractionDigits:2})}`;
 

@@ -209,7 +209,7 @@
 		});
 
         createPoolPriceWidget('chart-container', {
-            tokenAddress: tokenAddress,
+            totalSupply: getTokenSupply(tokenAddress),
             tokenPriceUSD: 0.000011,
             currentPrice: 0.000011,
             currentInvestment: 1000,

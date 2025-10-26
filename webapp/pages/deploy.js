@@ -1,20 +1,49 @@
 // Interdependent fields
 const startingPrice = document.getElementById('starting-price');
 const totalSupply = document.getElementById('total-supply');
-const marketCap = document.getElementById('initial-market-cap');
 const transitionPrice = document.getElementById('transition-price');
 const linearLimit = document.getElementById('liquidity-assistance');
 const purchaseInput = document.getElementById('tokens-to-purchase');
 const reserveSelect = document.getElementById('reserve-token');
 
+
+function updateChart() {
+	const ethPrice = 3950;
+
+	const startPrice = parseFloat(startingPrice.value);
+	const switchPrice = parseFloat(transitionPrice.value);
+
+	const reserveSymbol = reserveSelect.value;
+	const reserveAddress = tokenAddresses[currentNetwork + reserveSymbol];
+	const reserveDecimals = tokenDecimals[currentNetwork + reserveSymbol];
+
+	const curveLimit = parseFloat(linearLimit.value);
+	const totalSupplyN = parseFloat(totalSupply.value);
+	//const tokensToPurchasePercent = parseFloat(purchaseInput.value);
+	//const amountToPurchase = totalSupplyBN.mul(Math.floor(tokensToPurchasePercent * 100)).div(10000);
+
+	const dy = 2 * curveLimit / (startPrice + switchPrice);
+	const y1 = totalSupplyN - dy;
+	const reserveOffset = switchPrice * y1 - curveLimit;
+
+	createPoolPriceWidget('chart-container', {
+		totalSupply: totalSupplyN,
+		tokenPriceUSD: reserveSymbol == 'USDC' ? startPrice : startPrice / ethPrice,
+		currentPrice: startPrice,
+		currentInvestment: 0,
+		p0: startPrice,
+		curveLimit: curveLimit,
+		M: (switchPrice - startPrice) / curveLimit,
+		b: reserveOffset
+	});
+}
+
 // Initial ratios
 let transitionRatio = parseFloat(transitionPrice.value) / parseFloat(startingPrice.value);
-let linearRatio = parseFloat(linearLimit.value) / parseFloat(marketCap.value);
 
 // Utility: scale all dependent fields proportionally
 function scaleAllFields(scaleFactor, updated) {
 	const oldPrice = parseFloat(startingPrice.value);
-	const oldCap = parseFloat(marketCap.value);
 
 	const newPrice = oldPrice * scaleFactor;
 	const newSupply = (oldCap / newPrice).toFixed(6);
@@ -22,66 +51,58 @@ function scaleAllFields(scaleFactor, updated) {
 	if (startingPrice != updated) startingPrice.value = newPrice.toFixed(6);
 	if (totalSupply != updated) totalSupply.value = newSupply;
 
-	const newCap = (newPrice * newSupply).toFixed(2);
-	if (marketCap != updated) marketCap.value = newCap;
-
 	transitionPrice.value = (newPrice * transitionRatio).toFixed(6);
-	linearLimit.value = (newCap * linearRatio).toFixed(0);
 }
 
 // Event listeners
 startingPrice.addEventListener('input', () => {
-	const oldPrice = parseFloat(startingPrice.dataset.prev || startingPrice.value);
+	/*const oldPrice = parseFloat(startingPrice.dataset.prev || startingPrice.value);
 	const newPrice = parseFloat(startingPrice.value);
 	if (!isNaN(oldPrice) && !isNaN(newPrice)) {
 		scaleAllFields(newPrice / oldPrice, startingPrice);
 		startingPrice.dataset.prev = newPrice;
-	}
+	}*/
+	updateChart();
 });
 
 totalSupply.addEventListener('input', () => {
-	const oldSupply = parseFloat(totalSupply.dataset.prev || totalSupply.value);
+	/*const oldSupply = parseFloat(totalSupply.dataset.prev || totalSupply.value);
 	const newSupply = parseFloat(totalSupply.value);
 	if (!isNaN(oldSupply) && !isNaN(newSupply)) {
 		scaleAllFields(newSupply / oldSupply, totalSupply);
 		totalSupply.dataset.prev = newSupply;
-	}
-});
-
-marketCap.addEventListener('input', () => {
-	const oldCap = parseFloat(marketCap.dataset.prev || marketCap.value);
-	const newCap = parseFloat(marketCap.value);
-	if (!isNaN(oldCap) && !isNaN(newCap)) {
-		scaleAllFields(newCap / oldCap, marketCap);
-		marketCap.dataset.prev = newCap;
-	}
+	}*/
+	updateChart();
 });
 
 transitionPrice.addEventListener('input', () => {
-	const price = parseFloat(startingPrice.value);
+	/*const price = parseFloat(startingPrice.value);
 	const trans = parseFloat(transitionPrice.value);
-	if (!isNaN(price) && !isNaN(trans)) transitionRatio = trans / price;
+	if (!isNaN(price) && !isNaN(trans)) transitionRatio = trans / price;*/
+	updateChart();
 });
 
 linearLimit.addEventListener('input', () => {
-	const cap = parseFloat(marketCap.value);
+	/*const cap = parseFloat(marketCap.value);
 	const liq = parseFloat(linearLimit.value);
-	if (!isNaN(cap) && !isNaN(liq)) linearRatio = liq / cap;
+	if (!isNaN(cap) && !isNaN(liq)) linearRatio = liq / cap;*/
+	updateChart();
 });
 
 // Initialize prev values
 startingPrice.dataset.prev = startingPrice.value;
 totalSupply.dataset.prev = totalSupply.value;
-marketCap.dataset.prev = marketCap.value;
 
 // Reserve token change
 reserveSelect.addEventListener('change', (e) => {
 	linearLimit.value = e.target.value === 'WETH' ? '2' : '10000';
+	updateChart();
 });
 
 // Purchase slider
 purchaseInput.addEventListener('input', (e) => {
 	document.getElementById('tokens-to-purchase-value').innerText = `${e.target.value}%`;
+	updateChart();
 });
 
 // Deploy form submission
@@ -117,7 +138,7 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 		const switchPrice = toRawPrice(switchPriceRaw, decimals, reserveDecimals);
 
 		const twoPow128 = ethers.BigNumber.from(2).pow(128);
-		const dy = twoPow128.mul(curveLimit).div(startPrice.add(switchPrice));
+		const dy = twoPow128.mul(curveLimit).div(startPrice.add(switchPrice).mul(2));
 		const y1 = totalSupplyBN.sub(dy);
 		const reserveOffset = switchPrice.mul(y1).div(twoPow128).sub(curveLimit);
 
@@ -151,3 +172,6 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 		showSpinner(false);
 	}
 });
+
+
+updateChart();
