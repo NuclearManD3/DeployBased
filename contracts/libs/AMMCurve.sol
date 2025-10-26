@@ -87,9 +87,11 @@ library AMMCurvePMx {
 			// Price exceeds limit, compute at price limit
 			//   price = lastPrice + M * tokensIn
 			//   tokensIn = (price - lastPrice) / M
-			tokensIn = (priceLimit - lastPrice) / M;
-			tokensOut = basicBuyTokensOut(tokensIn, lastPrice, M);
-			return (tokensIn, tokensOut, priceLimit);
+			unchecked {
+				tokensIn = (priceLimit - lastPrice) / M;
+				tokensOut = basicBuyTokensOut(tokensIn, lastPrice, M);
+				return (tokensIn, tokensOut, priceLimit);
+			}
 		} else
 			return (maxTokensIn, tokensOut, newPrice);
 	}
@@ -131,8 +133,10 @@ library AMMCurvePMx {
 
 		// if new price would exceed the price limit, compute dx that reaches the limit
 		if (newPrice > priceLimit) {
-			tokensIn = (priceLimit - lastPrice) / M;
-			newPrice = priceLimit;
+			unchecked {
+				tokensIn = (priceLimit - lastPrice) / M;
+				newPrice = priceLimit;
+			}
 
 			// recompute tokensOut produced by that dx
 			return (tokensIn, basicBuyTokensOut(tokensIn, lastPrice, M), newPrice);
@@ -158,24 +162,21 @@ library AMMCurvePMx {
 	{
 		uint256 M = priceMultiple / curveLimit;
 
-		// Ensure we don't sell more tokens than available (x0 is the current supply)
-		if (maxTokensIn > x0)
-			maxTokensIn = x0;
-
-		// Compute tokensOut: dy = dx * lastPrice / (1 + M * dx / 2)
 		tokensOut = basicSellTokensOut(maxTokensIn, lastPrice, M);
 
-		// Calculate new price: P = lastPrice - M * dx (price decreases as supply decreases)
-		newPrice = lastPrice - M * maxTokensIn;
+		uint256 tokensOutMax = (lastPrice - priceLimit) / M;
+		if (tokensOutMax > x0)
+			tokensOutMax = x0;
 
-		// Enforce price limit (price cannot drop below priceLimit)
-		if (newPrice < priceLimit) {
-			// Compute tokensIn to reach priceLimit: tokensIn = (lastPrice - priceLimit) / M
-			tokensIn = (lastPrice - priceLimit) / M;
-			tokensOut = basicSellTokensOut(tokensIn, lastPrice, M);
-			return (tokensIn, tokensOut, priceLimit);
-		} else
-			return (maxTokensIn, tokensOut, newPrice);
+		if (tokensOut > tokensOutMax) {
+			tokensOut = tokensOutMax;
+			maxTokensIn = basicSellTokensIn(tokensOut, lastPrice, M);
+		}
+
+		// Calculate new price: P = lastPrice - M * dx (price decreases as supply decreases)
+		newPrice = lastPrice - M * tokensOut;
+
+		return (maxTokensIn, tokensOut, newPrice);
 	}
 
 	/**
@@ -196,29 +197,22 @@ library AMMCurvePMx {
 	{
 		uint256 M = priceMultiple / curveLimit;
 
-		// Compute tokensIn: dx = dy * (1 + M * dy / 2) / lastPrice
-		tokensIn = basicSellTokensIn(maxTokensOut, lastPrice, M);
-
-		// Ensure we don't sell more tokens than available (x0 is the current supply)
-		if (tokensIn > x0) {
-			tokensIn = x0;
-			tokensOut = basicSellTokensOut(tokensIn, lastPrice, M);
-		} else {
-			tokensOut = maxTokensOut;
-		}
+		// Ensure we don't sell for more tokens than available (x0 is the current supply)
+		if (maxTokensOut > x0)
+			maxTokensOut = x0;
 
 		// Calculate new price: P = lastPrice - M * dx
-		newPrice = lastPrice - M * tokensIn;
+		newPrice = lastPrice - M * maxTokensOut;
 
 		// Enforce price limit (price cannot drop below priceLimit)
 		if (newPrice < priceLimit) {
-			// Compute tokensIn to reach priceLimit: tokensIn = (lastPrice - priceLimit) / M
-			tokensIn = (lastPrice - priceLimit) / M;
-			tokensOut = basicSellTokensOut(tokensIn, lastPrice, M);
 			newPrice = priceLimit;
+			maxTokensOut = (lastPrice - priceLimit) / M;
 		}
 
-		return (tokensIn, tokensOut, newPrice);
+		tokensIn = basicSellTokensIn(maxTokensOut, lastPrice, M);
+
+		return (tokensIn, maxTokensOut, newPrice);
 	}
 }
 
@@ -280,9 +274,13 @@ library AMMCurveKxby {
 	function computeBuyTokensOut(uint256 maxTokensIn, uint256 reserveOffset, uint256 x0, uint256 y0, uint256 priceLimit) internal pure
 		returns (uint256 tokensIn, uint256 tokensOut, uint256 newPrice)
 	{
-		// b = reserveOffset
-		uint256 vx = x0 + reserveOffset;
-		uint256 K = vx * y0;
+		uint256 vx;
+		uint256 K;
+
+		unchecked {
+			vx = x0 + reserveOffset;
+			K = vx * y0;
+		}
 
 		// Use maxTokensIn as the default input
 		tokensIn = maxTokensIn;
@@ -321,14 +319,19 @@ library AMMCurveKxby {
 	function computeBuyTokensIn(uint256 maxTokensOut, uint256 reserveOffset, uint256 x0, uint256 y0, uint256 priceLimit) internal pure
 		returns (uint256 tokensIn, uint256 tokensOut, uint256 newPrice)
 	{
-		// Compute for (x + b)y = k
-		//   vx = x + b (virtual liquidity x)
-		//   b = reserveOffset
-		uint256 vx = x0 + reserveOffset;
-		uint256 K = vx * y0;
+		uint256 vx;
+		uint256 K;
+
+		unchecked {
+			vx = x0 + reserveOffset;
+			K = vx * y0;
+		}
+
 		uint256 y1 = y0 - maxTokensOut;
-		tokensIn = (K / y1) - vx;
-		newPrice = Math.mulDiv(0x100000000000000000000000000000000, vx + tokensIn, y1);
+		unchecked {
+			tokensIn = (K / y1) - vx;
+			newPrice = Math.mulDiv(0x100000000000000000000000000000000, vx + tokensIn, y1);
+		}
 
 		// If price exceeds the priceLimit, find dx that reaches priceLimit
 		if (newPrice > priceLimit) {
@@ -353,8 +356,13 @@ library AMMCurveKxby {
 	function computeSellTokensOut(uint256 maxTokensIn, uint256 reserveOffset, uint256 x0, uint256 y0, uint256 priceLimit) internal pure
 		returns (uint256 tokensIn, uint256 tokensOut, uint256 newPrice)
 	{
-		uint256 vx = x0 + reserveOffset;
-		uint256 K = vx * y0;
+		uint256 vx;
+		uint256 K;
+
+		unchecked {
+			vx = x0 + reserveOffset;
+			K = vx * y0;
+		}
 
 		// Use maxTokensIn as the default input (launch tokens)
 		tokensIn = maxTokensIn;
@@ -362,10 +370,13 @@ library AMMCurveKxby {
 		uint256 y1 = y0 + tokensIn;
 		// New virtual x: vx1 = K / y1
 		uint256 vx1 = K / y1;
-		// Tokens out: dx = vx - vx1 = x0 + b - (K / y1)
-		tokensOut = vx > vx1 ? vx - vx1 : 0;
-		// New price: (vx1 / y1) in 128.128 = (vx1 * 2^128) / y1
-		newPrice = Math.mulDiv(vx1, 0x100000000000000000000000000000000, y1);
+
+		unchecked {
+			// Tokens out: dx = vx - vx1 = x0 + b - (K / y1)
+			tokensOut = vx > vx1 ? vx - vx1 : 0;
+			// New price: (vx1 / y1) in 128.128 = (vx1 * 2^128) / y1
+			newPrice = Math.mulDiv(vx1, 0x100000000000000000000000000000000, y1);
+		}
 
 		// If price falls below limit, adjust tokensIn to hit priceLimit
 		if (newPrice < priceLimit) {
@@ -391,10 +402,14 @@ library AMMCurveKxby {
 	function computeSellTokensIn(uint256 maxTokensOut, uint256 reserveOffset, uint256 x0, uint256 y0, uint256 priceLimit) internal pure
 		returns (uint256 tokensIn, uint256 tokensOut, uint256 newPrice)
 	{
-		// Virtual x: vx = x0 + b
-		uint256 vx = x0 + reserveOffset;
-		// Constant K = (x0 + b) * y0
-		uint256 K = vx * y0;
+		uint256 vx;
+		uint256 K;
+
+		unchecked {
+			vx = x0 + reserveOffset;
+			K = vx * y0;
+		}
+
 		// New virtual x: vx1 = vx - dy
 		uint256 vx1 = vx - maxTokensOut;
 		// Tokens in: dy = K / vx1 - y0
