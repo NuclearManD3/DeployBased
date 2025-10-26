@@ -154,7 +154,6 @@
 			const amountInRaw = ethers.utils.parseUnits(amountIn.toString(), decimalsIn);
 			const amountOutMin = ethers.utils.parseUnits(amountOut.toString(), decimalsOut);
 			const tx = await executeSwap(signer, inAddr, outAddr, amountInRaw, amountOutMin, true);
-			await tx.wait();
 			swapStatus.innerText = 'Swap successful!';
 			swapAmountIn.value = '';
 			swapAmountOut.value = '';
@@ -177,6 +176,8 @@
 	tokenDetailsElem.innerHTML = '';
 	showSpinner(true);
 
+	const currentPrice = await getCurrentPrice(poolAddress);
+
 	try {
 		console.log(tokenAddress);
 		const [name, symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
@@ -184,7 +185,7 @@
 			getTokenSymbol(tokenAddress),
 			getTokenDecimals(tokenAddress),
 			getTokenSupply(tokenAddress),
-			getPoolOwner(tokenAddress) // updated to use pool.js
+			getTokenOwner(tokenAddress)
 		]);
 		console.log(name, symbol, decimals, totalSupply, ownerAddr);
 
@@ -193,6 +194,7 @@
 			${makeAddressHTML('Address', tokenAddress, "https://basescan.org/token/")}
 			<p><strong>Name:</strong> ${name}</p>
 			<p><strong>Symbol:</strong> ${symbol}</p>
+			<p><strong>Price:</strong> $${currentPrice}
 			<p><strong>Decimals:</strong> ${decimals}</p>
 			<p><strong>Total Supply:</strong> ${totalSupply}</p>
 			${makeAddressHTML('Owner', ownerAddr)}
