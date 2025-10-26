@@ -24,11 +24,11 @@ async function _getTokenContract(address, signer=null) {
 		'function owner() view returns (address)',
 		'function totalSupply() view returns (uint256)',
 		'function balanceOf(address) view returns (uint256)',
-        'function allowance(address owner, address spender) view returns (uint256)',
-        'function approve(address spender, uint256 value) returns (bool)'
+		'function allowance(address owner, address spender) view returns (uint256)',
+		'function approve(address spender, uint256 value) returns (bool)'
 	];
 	if (signer == null)
-	    signer = await getReadProvider();
+		signer = await getReadProvider();
 	return new ethers.Contract(address, abi, signer);
 }
 
