@@ -73,19 +73,25 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 
 	// CURVE CONFIGURATION
 	// This is the minimum price in reserve per launch, 128.128 format
-	uint256 immutable public minimumPrice128128;
+	uint256 immutable internal minimumPrice128128;
 	/// How fast the price will rise for the initial curve
 	/// P = minimumPrice + priceMultiple * reserveTokensHeld / curveLimit
 	/// Encoded in 128.128 form
-	uint256 immutable internal priceMultiple;
+	uint96 immutable internal priceMultiple;
 	/// Amount of reserve tokens needed to switch to xy = k mode
-	uint256 internal curveLimit;
+	uint256 immutable internal curveLimit;
 	/// b term in (x + b)y = k
-	uint256 internal reserveOffset;
+	uint256 immutable internal reserveOffset;
+
+	function curveParams() external view returns (uint256, uint256, uint256, uint256) {
+		return (minimumPrice128128, priceMultiple, curveLimit, reserveOffset);
+	}
 
 	uint128 immutable internal initialLaunchTokens;
 	function liquidity() public override view returns (uint128) {
-		return uint128(curveLimit * Math.sqrt(initialLaunchTokens));
+		unchecked {
+			return uint128(curveLimit * Math.sqrt(initialLaunchTokens));
+		}
 	}
 
 	uint256 internal _reserves;
@@ -93,9 +99,16 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		uint256 tmp = _reserves;
 		return (uint128(tmp & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF), uint128(tmp >> 128));
 	}
+
 	function setReserves(uint256 a, uint256 b) internal {
-		require((a >> 128) == 0 && (b >> 128) == 0);
-		_reserves = a | (b << 128);
+		uint256 tmp;
+		assembly {
+			tmp := or(shr(128, a), shr(128, b))
+			if tmp {
+				revert(0, 0)
+			}
+			sstore(_reserves.slot, or(a, shl(128, b)))
+		}
 	}
 
 	function feeGrowthGlobal0X128() public override view returns (uint256) {
@@ -106,24 +119,25 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		return 0; //Math.mulDiv(balance(token1) + claimedFees1, 1 << 128, liquidity);
 	}
 
-	/// @dev Prevents calling a function from anyone except the address returned by IUniswapV3Factory#owner()
-	modifier onlyFactoryOwner() {
-		require(msg.sender == IDeployBasedPoolFactory(factory).owner());
-		_;
+	function invertPrice128(uint256 price) internal pure returns (uint256) {
+		assembly {
+			if iszero(price) {
+				price := 1
+			}
+			price := div(sub(0, 1), price)
+		}
+		return price;
 	}
 
-	function invertPrice128(uint256 price) internal pure returns (uint256) {
-		if (price < 2)
-			price = 2;
-		return Math.mulDiv(0x100000000000000000000000000000000, 0x100000000000000000000000000000000, price);
-	}
+	//constructor()
+	//	UniswapV3PoolEmulator(647823328674822435, msg.sender, msg.sender, msg.sender, 10000) {}
 
 	constructor(address _reserve, address _launch, uint24 _fee, LaunchPoolInitParams memory initParams)
 		UniswapV3PoolEmulator(initParams.sqrtPriceX96, msg.sender, _reserve, _launch, _fee) {
 
 		// Initialize immutables
 		(reserve, launch, lendingPool) = (_reserve, _launch, ICompoundV3Pool(initParams.lendingPoolAddress));
-		priceMultiple = uint256(initParams.priceMultiple);
+		priceMultiple = initParams.priceMultiple;
 		curveLimit = uint256(initParams.curveLimit);
 		reserveOffset = uint256(initParams.reserveOffset);
 
@@ -184,13 +198,15 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
 
 			if (maxTokensIn > tokensIn && newPrice < priceLimit) {
-				uint256 remainingIn = maxTokensIn - tokensIn;
-				uint256 newX = x0 + tokensIn;
-				uint256 newY = y0 - tokensOut;
-				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensOut(remainingIn, reserveOffset, newX, newY, priceLimit);
-				tokensIn += tokensInNext;
-				tokensOut += tokensOutNext;
-				newPrice = nextPrice;
+				unchecked {
+					uint256 remainingIn = maxTokensIn - tokensIn;
+					uint256 newX = x0 + tokensIn;
+					uint256 newY = y0 - tokensOut;
+					(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensOut(remainingIn, reserveOffset, newX, newY, priceLimit);
+					tokensIn += tokensInNext;
+					tokensOut += tokensOutNext;
+					newPrice = nextPrice;
+				}
 			}
 		} else {
 			// Selling launch tokens - price will go from xyk curve to initial curve
@@ -201,19 +217,22 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
 
 			if (maxTokensIn > tokensIn && newPrice > priceLimit) {
-				uint256 remainingIn = maxTokensIn - tokensIn;
-				uint256 newX = x0 - tokensOut;
-				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurvePMx.computeSellTokensOut(remainingIn, priceMultiple, curveLimit, newX, priceLimit, newPrice);
-				tokensIn += tokensInNext;
-				tokensOut += tokensOutNext;
-				newPrice = nextPrice;
+				unchecked {
+					uint256 remainingIn = maxTokensIn - tokensIn;
+					uint256 newX = x0 - tokensOut;
+					(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurvePMx.computeSellTokensOut(remainingIn, priceMultiple, curveLimit, newX, priceLimit, newPrice);
+					tokensIn += tokensInNext;
+					tokensOut += tokensOutNext;
+					newPrice = nextPrice;
+				}
 			}
 		}
 
 		// Convert to sqrtPriceX96
 		newSqrtPriceX96 = uint160(Math.sqrt(newPrice) << 32);
-		if (poolPolarity)
+		if (poolPolarity) { unchecked {
 			newSqrtPriceX96 = uint160(uint256(0x1000000000000000000000000000000000000000000000000) / uint256(newSqrtPriceX96));
+		}}
 	}
 
 	function computeExpectedTokensIn(address inputToken, uint256 maxTokensOut, uint160 sqrtPriceX96, uint160 sqrtPriceLimitX96) public override view returns (uint256 tokensIn, uint256 tokensOut, uint160 newSqrtPriceX96) {
@@ -241,13 +260,15 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
 
 			if (maxTokensOut > tokensOut && newPrice < priceLimit) {
-				uint256 remainingOut = maxTokensOut - tokensOut;
-				uint256 newX = x0 + tokensIn;
-				uint256 newY = y0 - tokensOut;
-				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensIn(remainingOut, reserveOffset, newX, newY, priceLimit);
-				tokensIn += tokensInNext;
-				tokensOut += tokensOutNext;
-				newPrice = nextPrice;
+				unchecked {
+					uint256 remainingOut = maxTokensOut - tokensOut;
+					uint256 newX = x0 + tokensIn;
+					uint256 newY = y0 - tokensOut;
+					(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurveKxby.computeBuyTokensIn(remainingOut, reserveOffset, newX, newY, priceLimit);
+					tokensIn += tokensInNext;
+					tokensOut += tokensOutNext;
+					newPrice = nextPrice;
+				}
 			}
 		} else {
 			// Selling launch tokens - price will go from xyk curve to initial curve
@@ -258,19 +279,22 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 				(tokensIn, tokensOut, newPrice) = (0, 0, lastPrice);
 
 			if (maxTokensOut > tokensOut && newPrice > priceLimit) {
-				uint256 remainingOut = maxTokensOut - tokensOut;
-				uint256 newX = x0 - tokensOut;
-				(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurvePMx.computeSellTokensIn(remainingOut, priceMultiple, curveLimit, newX, priceLimit, newPrice);
-				tokensIn += tokensInNext;
-				tokensOut += tokensOutNext;
-				newPrice = nextPrice;
+				unchecked {
+					uint256 remainingOut = maxTokensOut - tokensOut;
+					uint256 newX = x0 - tokensOut;
+					(uint256 tokensInNext, uint256 tokensOutNext, uint256 nextPrice) = AMMCurvePMx.computeSellTokensIn(remainingOut, priceMultiple, curveLimit, newX, priceLimit, newPrice);
+					tokensIn += tokensInNext;
+					tokensOut += tokensOutNext;
+					newPrice = nextPrice;
+				}
 			}
 		}
 
 		// Convert to sqrtPriceX96
 		newSqrtPriceX96 = uint160(Math.sqrt(newPrice) << 32);
-		if (poolPolarity)
+		if (poolPolarity) { unchecked {
 			newSqrtPriceX96 = uint160(uint256(0x1000000000000000000000000000000000000000000000000) / uint256(newSqrtPriceX96));
+		}}
 	}
 
 	function payTokensToSwapper(address token, uint256 amount, address recipient) internal override {
@@ -289,7 +313,7 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 	}
 
 	function afterSwap(bool zeroForOne, uint256 tokensIn, uint256 tokensOut) internal override {
-		{
+		unchecked {
 			(uint128 reserve0, uint128 reserve1) = reserves();
 			uint256 feeOut = Math.mulDiv(tokensOut, fee, 1e6 - fee);
 
@@ -342,12 +366,15 @@ contract DeployBasedLaunchPoolSimple is UniswapV3PoolEmulator, Ownable {
 		}
 		uint256 protocolFee0 = amount0 >> 3;
 		uint256 protocolFee1 = amount1 >> 3;
-		payTokensToSwapper(token0, amount0 - protocolFee0, recipient);
-		payTokensToSwapper(token1, amount1 - protocolFee1, recipient);
-		payTokensToSwapper(token0, protocolFee0, factory);
-		payTokensToSwapper(token1, protocolFee1, factory);
 
-		return (uint128(amount0 - protocolFee0), uint128(amount1 - protocolFee1));
+		unchecked {
+			payTokensToSwapper(token0, amount0 - protocolFee0, recipient);
+			payTokensToSwapper(token1, amount1 - protocolFee1, recipient);
+			payTokensToSwapper(token0, protocolFee0, factory);
+			payTokensToSwapper(token1, protocolFee1, factory);
+
+			return (uint128(amount0 - protocolFee0), uint128(amount1 - protocolFee1));
+		}
 	}
 
 	/*function donate(uint128 amount0, uint128 amount1) external lock returns (uint128, uint128) {
