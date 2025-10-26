@@ -11,6 +11,62 @@ contract DeployBasedTokenFactoryProxy is Ownable {
 	mapping(uint256 => address) public tokens;
 	address public poolFactory;
 
+	struct TokenDetails {
+		address token;
+		address owner;
+		string name;
+		string symbol;
+	}
+
+	function listManyTokens(int256 start, int256 end) external view returns (address[] memory array) {
+		int256 len = int256(totalTokens);
+
+		// Handle negative indices
+		if (start < 0) start += len;
+		if (end < 0) end += len;
+
+		// Bound checks
+		if (start >= len) start = len - 1;
+		if (start < 0) start = 0;
+		if (end < 0) end = 0;
+		if (end > len) end = len;
+
+		require(start <= end && end <= len, "Invalid range");
+
+		array = new address[](uint256(end - start));
+
+		for (int256 i = start; i < end; i++)
+			array[uint256(i - start)] = tokens[uint256(i)];
+	}
+
+	function listManyTokenDetails(int256 start, int256 end) external view returns (TokenDetails[] memory array) {
+		int256 len = int256(totalTokens);
+
+		// Handle negative indices
+		if (start < 0) start += len;
+		if (end < 0) end += len;
+
+		// Bound checks
+		if (start >= len) start = len - 1;
+		if (start < 0) start = 0;
+		if (end < 0) end = 0;
+		if (end > len) end = len;
+
+		require(start <= end && end <= len, "Invalid range");
+
+		array = new TokenDetails[](uint256(end - start));
+
+		for (int256 i = start; i < end; i++) {
+			address token = tokens[uint256(i)];
+			array[uint256(i - start)] = TokenDetails(
+				token,
+				Ownable(token).owner(),
+				IERC20(token).name(),
+				IERC20(token).symbol()
+			);
+		}
+	}
+
 	function implementation() public view returns (address impl) {
 		assembly {
 			impl := sload(0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc)
