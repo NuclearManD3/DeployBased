@@ -165,9 +165,7 @@
 			swapButton.disabled = false;
 		}
 	});
-})();
 
-(async () => {
 	const params = new URLSearchParams(window.location.search);
 	const tokenAddress = params.get('address');
 	if (!tokenAddress) return;
@@ -180,6 +178,7 @@
 	showSpinner(true);
 
 	try {
+		console.log(tokenAddress);
 		const [name, symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
 			getTokenName(tokenAddress),
 			getTokenSymbol(tokenAddress),
@@ -187,6 +186,7 @@
 			getTokenSupply(tokenAddress),
 			getPoolOwner(tokenAddress) // updated to use pool.js
 		]);
+		console.log(name, symbol, decimals, totalSupply, ownerAddr);
 
 		tokenNameElem.innerText = `${symbol} Token`;
 		tokenDetailsElem.innerHTML = `
@@ -208,6 +208,17 @@
 				} catch {}
 			});
 		});
+
+        createPoolPriceWidget('pool-widget-container', {
+            tokenAddress: tokenAddress,
+            tokenPriceUSD: 1.25,
+            currentPrice: 1.25,
+            currentInvestment: 1000,
+            p0: 1.0,
+            curveLimit: 2000,
+            M: 0.0001,
+            b: 500
+        });
 
 	} catch (err) {
 		console.error('Error loading token:', err);
