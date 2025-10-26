@@ -114,6 +114,7 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 	try {
 		const name = document.getElementById('token-name').value;
 		const symbol = document.getElementById('token-symbol').value;
+		const description = document.getElementById('token-description').value;
 		const decimals = parseInt(document.getElementById('decimals').value);
 		const totalSupplyBN = ethers.utils.parseUnits(totalSupply.value, decimals);
 
@@ -138,7 +139,7 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 		const switchPrice = toRawPrice(switchPriceRaw, decimals, reserveDecimals);
 
 		const twoPow128 = ethers.BigNumber.from(2).pow(128);
-		const dy = twoPow128.mul(curveLimit).div(startPrice.add(switchPrice).mul(2));
+		const dy = twoPow128.mul(curveLimit).div(startPrice.add(switchPrice)).mul(2);
 		const y1 = totalSupplyBN.sub(dy);
 		const reserveOffset = switchPrice.mul(y1).div(twoPow128).sub(curveLimit);
 
@@ -150,6 +151,7 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 		const tx = await factory.launchToken(
 			name,
 			symbol,
+			description,
 			decimals,
 			reserveAddress,
 			fee,
