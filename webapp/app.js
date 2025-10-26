@@ -15,7 +15,7 @@ const usdcAddresses = {
 	testnet: '0xREPLACE_USDC_TESTNET'
 };
 const factoryAddresses = {
-	mainnet: '0x13f92684Ac881b81fb5953951072B82700AE9e7d',
+	mainnet: '0x88B49d6F0BC138f52C60B33CaB2245ADe9597189',
 	testnet: '0xREPLACE_FACTORY_TESTNET'
 };
 
@@ -30,11 +30,13 @@ const tokenDecimals = {
 const factoryAbi = [
 	'function totalTokens() view returns (uint256)',
 	'function tokens(uint256) view returns (address)',
-	'function launchToken(string memory, string memory, uint8, address, uint24, uint256, uint256, uint96, uint128, uint128) returns (address, address)',
+	'function launchToken(string memory, string memory, string memory, uint8, address, uint24, uint256, uint256, uint96, uint128, uint128) returns (address, address)',
+	'function listManyTokens(int256 start, int256 end) external view returns (address[] memory array)',
+	'function listManyTokenDetails(int256 start, int256 end) external view returns (tuple(address token, address owner, string name, string symbol)[] memory array)',
 	'event TokenCreated(address indexed token, uint8 decimals, string name, string symbol)'
 ];
 
-const MAX_TOKENS_FETCH = 200; // safety cap to avoid huge loops
+const MAX_TOKENS_FETCH = 50; // safety cap to avoid huge loops
 // ----------------------------------------------------------------
 
 let currentNetwork = 'mainnet';
@@ -298,29 +300,44 @@ async function getReadProvider() {
 	return new ethers.providers.JsonRpcProvider(rpcUrls[currentNetwork]);
 }
 
-let renderTokenListLock = false;
-async function renderTokenList() {
-	if (renderTokenListLock)
-		return;
-	renderTokenListLock = true;
-	showSpinner(true);
-	const tokenList = document.getElementById('token-list');
-	tokenList.innerHTML = '';
-	const tokensFromChain = await fetchTokensFromFactory();
-	if (!tokensFromChain.length) {
-		tokenList.innerHTML = '<div class="token-item">No tokens found (or factory not configured)</div>';
-	} else {
-		tokensFromChain.forEach(token => {
-			const item = document.createElement('div');
-			item.classList.add('token-item');
-			const label = token.name || token.symbol || token.address;
-			const sym = token.symbol || '';
-			item.innerHTML = `<a href="token.html?address=${token.address}">${label} ${sym ? `(${sym})` : ''}</a>`;
-			tokenList.appendChild(item);
-		});
+// Fetches a range of token addresses from the factory contract
+async function listManyTokens(start, end) {
+	try {
+		const readProvider = await getReadProvider();
+		const factoryAddress = factoryAddresses[currentNetwork];
+		if (!factoryAddress) {
+			throw new Error('Factory address not found for current network');
+		}
+		const factory = new ethers.Contract(factoryAddress, factoryAbi, readProvider);
+		const tokenAddresses = await factory.listManyTokens(start, end);
+		return tokenAddresses; // Returns array of addresses
+	} catch (err) {
+		console.warn(`Failed to fetch tokens from ${start} to ${end}:`, err);
+		return [];
 	}
-	showSpinner(false);
-	renderTokenListLock = false;
+}
+
+// Fetches detailed token information for a range of tokens
+async function listManyTokenDetails(start, end) {
+	try {
+		const readProvider = await getReadProvider();
+		const factoryAddress = factoryAddresses[currentNetwork];
+		if (!factoryAddress) {
+			throw new Error('Factory address not found for current network');
+		}
+		const factory = new ethers.Contract(factoryAddress, factoryAbi, readProvider);
+		const tokenDetails = await factory.listManyTokenDetails(start, end);
+		// Map tuple array to objects for easier front-end use
+		return tokenDetails.map(detail => ({
+			token: detail.token,
+			owner: detail.owner,
+			name: detail.name,
+			symbol: detail.symbol
+		}));
+	} catch (err) {
+		console.warn(`Failed to fetch token details from ${start} to ${end}:`, err);
+		return [];
+	}
 }
 
 // Generates a pool price/slippage widget
