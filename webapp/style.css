@@ -401,3 +401,19 @@ button[type="submit"]:hover::after {
 	color: var(--text-dim);
 	margin-left: auto;
 }
+
+
+// CHARTING
+
+#token-chart-right {
+	min-width: 300px;
+	flex: 1;
+	background-color: var(--bg-card);
+	border: 1px solid var(--border-color);
+	border-radius: var(--radius);
+	padding: 1rem 1.2rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	transition: transform var(--transition), box-shadow var(--transition);
+}

@@ -210,13 +210,13 @@
 
         createPoolPriceWidget('chart-container', {
             tokenAddress: tokenAddress,
-            tokenPriceUSD: 1.25,
-            currentPrice: 1.25,
+            tokenPriceUSD: 0.000011,
+            currentPrice: 0.000011,
             currentInvestment: 1000,
-            p0: 1.0,
-            curveLimit: 2000,
-            M: 0.0001,
-            b: 500
+            p0: 0.00001,
+            curveLimit: 1000,
+            M: 1e-9,
+            b: 8952.381
         });
 
 	} catch (err) {
