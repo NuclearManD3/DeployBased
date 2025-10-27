@@ -20,6 +20,7 @@ async function _getTokenContract(address, signer=null) {
 	const abi = [
 		'function name() view returns (string)',
 		'function symbol() view returns (string)',
+		'function description() view returns (string)',
 		'function decimals() view returns (uint8)',
 		'function owner() view returns (address)',
 		'function totalSupply() view returns (uint256)',
@@ -72,6 +73,11 @@ async function getTokenDecimals(address) {
 	tokenCache[address] = { ...(tokenCache[address] || {}), decimals };
 	saveCache();
 	return decimals;
+}
+
+async function getTokenDescription(address) {
+	const contract = await _getTokenContract(address);
+	return await contract.description();
 }
 
 async function getTokenSupply(address) {

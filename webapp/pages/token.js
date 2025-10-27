@@ -177,11 +177,12 @@
 	const currentPrice = await getCurrentPrice(poolAddress);
 
 	try {
-		const [symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
+		const [symbol, decimals, totalSupply, ownerAddr, description] = await Promise.all([
 			getTokenSymbol(tokenAddress),
 			getTokenDecimals(tokenAddress),
 			getTokenSupply(tokenAddress),
-			getTokenOwner(tokenAddress)
+			getTokenOwner(tokenAddress),
+			getTokenDescription(tokenAddress)
 		]);
 
 		tokenNameElem.innerText = `${tokenName}`;
@@ -189,6 +190,7 @@
 			<p><strong>Symbol:</strong> ${symbol}</p>
 			<p><strong>Price:</strong> $${currentPrice}
 			<p><strong>Total Supply:</strong> ${totalSupply}</p>
+			<p>${description}</p>
 			<p><strong>Decimals:</strong> ${decimals}</p>
 			${makeAddressHTML('Address', tokenAddress, "https://basescan.org/token/")}
 			${makeAddressHTML('Owner', ownerAddr)}
