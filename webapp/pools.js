@@ -155,7 +155,7 @@ async function getPoolCurve(address) {
 	const minPriceRaw = curve.minPrice;
 	let basePrice = (2 ** 128) * (10 ** (dec1 - dec0)) / minPriceRaw;
 
-	const multiple = curve.limit * curve.multiple / (2 ** 128);
+	const multiple = (10 ** dec1) * curve.multiple / (2 ** 128) / curve.limit;
 
 	const curveLimit = curve.limit / (10 ** dec0);
 
@@ -167,9 +167,8 @@ async function getPoolCurve(address) {
 		curveLimit,
 		reserveOffset
 	}
-	//poolCache[address] = { ...(poolCache[address] || {}), curve };
-	//savePoolCache();
-	console.log(curve);
+	poolCache[address] = { ...(poolCache[address] || {}), curve };
+	savePoolCache();
 	return curve;
 }
 
