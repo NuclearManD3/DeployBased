@@ -8,9 +8,11 @@
 	const swapStatus = document.getElementById('swap-status');
 	const swapDirectionBtn = document.getElementById('swap-direction');
 
-	const tokenPageAddress = new URLSearchParams(window.location.search).get('address');
+	const tokenAddress = new URLSearchParams(window.location.search).get('address');
+	const tokenName = await getTokenName(tokenAddress);
+
 	const defaultTokens = [
-		{ address: tokenPageAddress, label: 'Your Token' },
+		{ address: tokenAddress, label: tokenName },
 		{ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', label: 'USDC' }
 	];
 
@@ -31,7 +33,7 @@
 	}
 
 	// Initialize both dropdowns with all tokens
-	populateDropdown(swapTokenIn, defaultTokens, tokenPageAddress);
+	populateDropdown(swapTokenIn, defaultTokens, tokenAddress);
 	populateDropdown(swapTokenOut, defaultTokens, defaultTokens[1].address);
 
 	// Allow pasting arbitrary addresses
@@ -50,7 +52,7 @@
 	swapTokenOut.addEventListener('change', () => addTokenIfMissing(swapTokenOut, swapTokenOut.value));
 
 	await checkWalletConnection();
-	poolAddress = await findPoolForTokens(tokenPageAddress, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
+	poolAddress = await findPoolForTokens(tokenAddress, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
 
 	// If user is pool owner, add fee collection button
 	try {
@@ -165,10 +167,6 @@
 		}
 	});
 
-	const params = new URLSearchParams(window.location.search);
-	const tokenAddress = params.get('address');
-	if (!tokenAddress) return;
-
 	const tokenNameElem = document.getElementById('token-name');
 	const tokenDetailsElem = document.getElementById('token-details');
 
@@ -179,24 +177,20 @@
 	const currentPrice = await getCurrentPrice(poolAddress);
 
 	try {
-		console.log(tokenAddress);
-		const [name, symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
-			getTokenName(tokenAddress),
+		const [symbol, decimals, totalSupply, ownerAddr] = await Promise.all([
 			getTokenSymbol(tokenAddress),
 			getTokenDecimals(tokenAddress),
 			getTokenSupply(tokenAddress),
 			getTokenOwner(tokenAddress)
 		]);
-		console.log(name, symbol, decimals, totalSupply, ownerAddr);
 
-		tokenNameElem.innerText = `${symbol} Token`;
+		tokenNameElem.innerText = `${tokenName}`;
 		tokenDetailsElem.innerHTML = `
-			${makeAddressHTML('Address', tokenAddress, "https://basescan.org/token/")}
-			<p><strong>Name:</strong> ${name}</p>
 			<p><strong>Symbol:</strong> ${symbol}</p>
 			<p><strong>Price:</strong> $${currentPrice}
-			<p><strong>Decimals:</strong> ${decimals}</p>
 			<p><strong>Total Supply:</strong> ${totalSupply}</p>
+			<p><strong>Decimals:</strong> ${decimals}</p>
+			${makeAddressHTML('Address', tokenAddress, "https://basescan.org/token/")}
 			${makeAddressHTML('Owner', ownerAddr)}
 		`;
 
