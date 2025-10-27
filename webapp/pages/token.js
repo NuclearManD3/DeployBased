@@ -75,7 +75,7 @@
 					);
 					swapStatus.innerText = 'Fees collected!';
 				} catch (err) {
-					swapStatus.innerText = 'Fee collection failed: ' + err.message;
+					swapStatus.innerText = 'Fee collection failed: ' + err.message.split("(", 1)[0];
 				}
 			});
 			document.getElementById('token-details').insertAdjacentElement('afterend', collectBtn);
@@ -160,7 +160,7 @@
 			swapAmountIn.value = '';
 			swapAmountOut.value = '';
 		} catch (err) {
-			swapStatus.innerText = 'Swap failed: ' + err.message;
+			swapStatus.innerText = 'Swap failed: ' + err.message.split("(", 1)[0];
 			console.error(err);
 		} finally {
 			swapButton.disabled = false;
@@ -233,5 +233,6 @@
 	tokenDetailsElem.innerHTML = '';
 
 	await refreshTokenData();
+	setTimeout(updateUSDCBalance, 500);
 
 })();
