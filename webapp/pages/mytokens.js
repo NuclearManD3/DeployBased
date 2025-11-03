@@ -27,7 +27,7 @@ async function* ownedTokensGenerator(account, factory, max = 20) {
 }
 
 
-(async () => {
+async function refreshPageDetails() {
 	if (!account) await connectWallet();
 
 	const myTokenList = document.getElementById('my-token-list');
@@ -47,4 +47,4 @@ async function* ownedTokensGenerator(account, factory, max = 20) {
 		ownedTokensGenerator(account, factory),
 		renderTokenCard
 	);
-})();
+}

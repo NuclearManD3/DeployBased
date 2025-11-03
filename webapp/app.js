@@ -2,29 +2,46 @@
 let provider;
 let signer;
 let account;
+
 const chainIds = {
 	mainnet: 8453, // Base mainnet
 	testnet: 84532 // Base Sepolia testnet
 };
+
 const rpcUrls = {
 	mainnet: 'https://mainnet.base.org',
 	testnet: 'https://sepolia.base.org'
 };
+
+const explorerUrls = {
+	mainnet: 'https://basescan.org',
+	testnet: 'https://sepolia.basescan.org'
+}
+
 const usdcAddresses = {
 	mainnet: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
-	testnet: '0xREPLACE_USDC_TESTNET'
+	testnet: '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
 };
+
 const factoryAddresses = {
 	mainnet: '0x88B49d6F0BC138f52C60B33CaB2245ADe9597189',
-	testnet: '0xREPLACE_FACTORY_TESTNET'
+	testnet: '0x1be2351ce3840de7eea5f701688427606cd55c79'
 };
 
 const tokenAddresses = {
-	mainnetUSDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+	mainnetUSDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+	testnetUSDC: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+	mainnetWETH: '0x4200000000000000000000000000000000000006',
+	testnetWETH: '0x4200000000000000000000000000000000000006',
+	mainnetUSDS: '0x820C137fa70C8691f0e44Dc420a5e53c168921Dc'
 }
 
 const tokenDecimals = {
-	mainnetUSDC: 6
+	mainnetUSDC: 6,
+	testnetUSDC: 6,
+	mainnetWETH: 18,
+	testnetWETH: 18,
+	mainnetUSDS: 18
 }
 
 const factoryAbi = [
@@ -40,6 +57,30 @@ const MAX_TOKENS_FETCH = 50; // safety cap to avoid huge loops
 // ----------------------------------------------------------------
 
 let currentNetwork = 'mainnet';
+
+function usdcAddress() {
+	return usdcAddresses[currentNetwork];
+}
+
+function explorer() {
+	return explorerUrls[currentNetwork];
+}
+
+async function setCurrentNetwork() {
+	const network = await provider.getNetwork();
+	const chainId = network.chainId;
+	if (chainId === chainIds.mainnet) {
+		currentNetwork = 'mainnet';
+	} else if (chainId === chainIds.testnet) {
+		currentNetwork = 'testnet';
+	} else {
+		// Switch to default if unsupported
+		currentNetwork = 'mainnet';
+		await switchNetwork();
+		return;
+	}
+	document.getElementById('network-switch').value = currentNetwork;
+}
 
 // Wallet connection logic
 async function connectWallet() {
@@ -67,9 +108,9 @@ async function connectWallet() {
 	}
 }
 
-function makeAddressHTML(label, addr, root = "https://basescan.org/address/") {
+function makeAddressHTML(label, addr, root = "/address/") {
 	//const shortAddr = addr.slice(0, 6) + '...' + addr.slice(-4);
-	const link = root + addr;
+	const link = explorer() + root + addr;
 	return `
 		<p><strong>${label}:</strong>
 			<a href="${link}" target="_blank" class="ext-link">
@@ -99,7 +140,7 @@ function renderTokenCard(tok) {
 			<a href="token.html?address=${tok.address}" class="token-link">${tok.name} (${tok.symbol})</a>
 		</div>
 		<div class="token-explorer">
-			${makeAddressHTML("Token address", tok.address, "https://basescan.org/token/")}
+			${makeAddressHTML("Token address", tok.address, "/token/")}
 		</div>
 	`;
 	// Copy button logic
@@ -166,22 +207,6 @@ async function checkWalletConnection() {
 	}
 }
 
-async function setCurrentNetwork() {
-	const network = await provider.getNetwork();
-	const chainId = network.chainId;
-	if (chainId === chainIds.mainnet) {
-		currentNetwork = 'mainnet';
-	} else if (chainId === chainIds.testnet) {
-		currentNetwork = 'testnet';
-	} else {
-		// Switch to default if unsupported
-		currentNetwork = 'mainnet';
-		await switchNetwork();
-		return;
-	}
-	document.getElementById('network-switch').value = currentNetwork;
-}
-
 async function switchNetwork() {
 	const chainIdHex = '0x' + chainIds[currentNetwork].toString(16);
 	try {
@@ -204,7 +229,7 @@ async function switchNetwork() {
 								decimals: 18
 							},
 							rpcUrls: [rpcUrls[currentNetwork]],
-							blockExplorerUrls: [currentNetwork === 'mainnet' ? 'https://basescan.org/' : 'https://sepolia.basescan.org/']
+							blockExplorerUrls: [explorer()]
 						}
 					]
 				});
@@ -250,11 +275,8 @@ function showError(message) {
 // Network switch listener
 document.getElementById('network-switch').addEventListener('change', async (e) => {
 	currentNetwork = e.target.value;
-	if (provider) {
-		await switchNetwork();
-		await updateUSDCBalance();
-		loadData();
-	}
+	await switchNetwork();
+	await checkWalletConnection();
 });
 
 // Connect/Disconnect buttons
@@ -431,10 +453,10 @@ async function createPoolPriceWidget(containerId, params) {
 
 
 // Page-specific logic
-let alreadyLoaded = false;
+let inLoading = false;
 async function loadData() {
-	if (alreadyLoaded) return;
-	alreadyLoaded = true;
+	if (inLoading) return;
+	inLoading = true;
 	const path = window.location.pathname;
 	if (path.endsWith('about.html')) {
 		const totalTokensElem = document.getElementById('total-tokens');
@@ -452,8 +474,17 @@ async function loadData() {
 			totalTokensElem.innerText = '?';
 		}
 	}
+
+	try {
+		// Optionally, a page may define this to catch this event
+		await refreshPageDetails();
+	} catch (e) {
+		console.log(e);
+	}
+
+	inLoading = false;
 }
 
 // Initial load
 checkWalletConnection();
-loadData();
+

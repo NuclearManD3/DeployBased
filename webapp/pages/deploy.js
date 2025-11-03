@@ -111,7 +111,7 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 	if (!signer) return showError('Connect wallet first');
 	showSpinner(true);
 
-	try {
+	//try {
 		const name = document.getElementById('token-name').value;
 		const symbol = document.getElementById('token-symbol').value;
 		const description = document.getElementById('token-description').value;
@@ -168,11 +168,11 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 
 		if (tokenAddr) window.location.href = `token.html?address=${tokenAddr}`;
 		else showError('TokenCreated event not found');
-	} catch (err) {
+	/*} catch (err) {
 		showError(err.message);
 	} finally {
 		showSpinner(false);
-	}
+	}*/
 });
 
 

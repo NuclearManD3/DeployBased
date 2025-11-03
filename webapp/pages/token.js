@@ -1,5 +1,8 @@
 
-(async () => {
+const tokenNameElem = document.getElementById('token-name');
+const tokenDetailsElem = document.getElementById('token-details');
+
+async function refreshPageDetails() {
 	const swapAmountIn = document.getElementById('swap-amount-in');
 	const swapAmountOut = document.getElementById('swap-amount-out');
 	const swapTokenIn = document.getElementById('swap-token-in');
@@ -13,7 +16,7 @@
 
 	const defaultTokens = [
 		{ address: tokenAddress, label: tokenName },
-		{ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', label: 'USDC' }
+		{ address: usdcAddress(), label: 'USDC' }
 	];
 
 	let poolAddress = null;
@@ -52,7 +55,72 @@
 	swapTokenOut.addEventListener('change', () => addTokenIfMissing(swapTokenOut, swapTokenOut.value));
 
 	await checkWalletConnection();
-	poolAddress = await findPoolForTokens(tokenAddress, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
+
+	poolAddress = await findPoolForTokens(tokenAddress, usdcAddress());
+	console.log(tokenAddress, usdcAddress(), poolAddress);
+
+	async function refreshTokenData() {
+		showSpinner(true);
+
+		const currentPrice = await getCurrentPrice(poolAddress);
+
+		try {
+			const [symbol, decimals, totalSupply, ownerAddr, description] = await Promise.all([
+				getTokenSymbol(tokenAddress),
+				getTokenDecimals(tokenAddress),
+				getTokenSupply(tokenAddress),
+				getTokenOwner(tokenAddress),
+				getTokenDescription(tokenAddress)
+			]);
+
+			tokenNameElem.innerText = `${tokenName}`;
+			tokenDetailsElem.innerHTML = `
+				<p><strong>Symbol:</strong> ${symbol}</p>
+				<p><strong>Price:</strong> $${currentPrice}
+				<p><strong>Total Supply:</strong> ${totalSupply}</p>
+				<p>${description}</p>
+				<p><strong>Decimals:</strong> ${decimals}</p>
+				${makeAddressHTML('Address', tokenAddress, "/token/")}
+				${makeAddressHTML('Owner', ownerAddr)}
+			`;
+
+			document.querySelectorAll('.copy-btn').forEach(btn => {
+				btn.addEventListener('click', async () => {
+					try {
+						await navigator.clipboard.writeText(btn.dataset.addr);
+						btn.innerText = '✓';
+						setTimeout(() => { btn.innerText = 'Copy'; }, 1000);
+					} catch {}
+				});
+			});
+
+			// Draw the chart
+			reserves = await getPoolReserves(poolAddress);
+			curve = await getPoolCurve(poolAddress);
+			createPoolPriceWidget('chart-container', {
+				totalSupply: await getTokenSupply(tokenAddress),
+				tokenPriceUSD: currentPrice,
+				currentPrice: currentPrice,
+				currentInvestment: reserves.reserve,
+				p0: curve.basePrice,
+				curveLimit: curve.curveLimit,
+				M: curve.multiple,
+				b: curve.reserveOffset
+			});
+
+		} catch (err) {
+			console.error('Error loading token:', err);
+			tokenNameElem.innerText = 'Error';
+			tokenDetailsElem.innerHTML = 'Could not fetch token info.';
+		} finally {
+			showSpinner(false);
+		}
+	}
+
+	tokenNameElem.innerText = 'Loading...';
+	tokenDetailsElem.innerHTML = '';
+
+	refreshTokenData();
 
 	// If user is pool owner, add fee collection button
 	try {
@@ -168,71 +236,4 @@
 		await refreshTokenData();
 	});
 
-	const tokenNameElem = document.getElementById('token-name');
-	const tokenDetailsElem = document.getElementById('token-details');
-
-	async function refreshTokenData() {
-		showSpinner(true);
-
-		const currentPrice = await getCurrentPrice(poolAddress);
-
-		try {
-			const [symbol, decimals, totalSupply, ownerAddr, description] = await Promise.all([
-				getTokenSymbol(tokenAddress),
-				getTokenDecimals(tokenAddress),
-				getTokenSupply(tokenAddress),
-				getTokenOwner(tokenAddress),
-				getTokenDescription(tokenAddress)
-			]);
-
-			tokenNameElem.innerText = `${tokenName}`;
-			tokenDetailsElem.innerHTML = `
-				<p><strong>Symbol:</strong> ${symbol}</p>
-				<p><strong>Price:</strong> $${currentPrice}
-				<p><strong>Total Supply:</strong> ${totalSupply}</p>
-				<p>${description}</p>
-				<p><strong>Decimals:</strong> ${decimals}</p>
-				${makeAddressHTML('Address', tokenAddress, "https://basescan.org/token/")}
-				${makeAddressHTML('Owner', ownerAddr)}
-			`;
-
-			document.querySelectorAll('.copy-btn').forEach(btn => {
-				btn.addEventListener('click', async () => {
-					try {
-						await navigator.clipboard.writeText(btn.dataset.addr);
-						btn.innerText = '✓';
-						setTimeout(() => { btn.innerText = 'Copy'; }, 1000);
-					} catch {}
-				});
-			});
-
-			// Draw the chart
-			reserves = await getPoolReserves(poolAddress);
-			curve = await getPoolCurve(poolAddress);
-			createPoolPriceWidget('chart-container', {
-				totalSupply: await getTokenSupply(tokenAddress),
-				tokenPriceUSD: currentPrice,
-				currentPrice: currentPrice,
-				currentInvestment: reserves.reserve,
-				p0: curve.basePrice,
-				curveLimit: curve.curveLimit,
-				M: curve.multiple,
-				b: curve.reserveOffset
-			});
-
-		} catch (err) {
-			console.error('Error loading token:', err);
-			tokenNameElem.innerText = 'Error';
-			tokenDetailsElem.innerHTML = 'Could not fetch token info.';
-		} finally {
-			showSpinner(false);
-		}
-	}
-
-	tokenNameElem.innerText = 'Loading...';
-	tokenDetailsElem.innerHTML = '';
-
-	await refreshTokenData();
-	setTimeout(updateUSDCBalance, 500);
-
-})();
+}

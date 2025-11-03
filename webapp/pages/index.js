@@ -48,15 +48,11 @@ async function* allTokensGenerator(max = 20) {
 
 
 
-(async () => {
-	if (!window.signer && window.ethereum) {
-		await checkWalletConnection();
-	}
-
+async function refreshPageDetails() {
 	const tokenListElem = document.getElementById('token-list');
 	if (!tokenListElem) return;
 
 	await renderList(tokenListElem, allTokensGenerator(), renderTokenCard);
 
-})();
+}
 

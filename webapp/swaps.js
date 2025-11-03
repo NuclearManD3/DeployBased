@@ -1,7 +1,13 @@
 // swaps.js
 
-const FACTORY_ADDRESS = '0x263a00623e00e135ec1810280d491c0fd4e5b8dd';
-const SWAPPER_ADDRESS = '0x828f0508971c67f472b7dd52155b5850a68cec86'; // replace
+const FACTORY_ADDRESS = {
+	mainnet: '0x263a00623e00e135ec1810280d491c0fd4e5b8dd',
+	testnet: '0xbbf057efe3e96f20533e43b7423f792a0af0dfeb'
+};
+const SWAPPER_ADDRESS = {
+	mainnet: '0x828f0508971c67f472b7dd52155b5850a68cec86',
+	testnet: '0xe062c6ddBa660F19Fd455c02EbA146e0D937ADb5'
+};
 const FEE_TIER = 10000; // 1%
 
 const SQRT_PRICE_LIMIT_UP = 0x1000000000n;
@@ -27,16 +33,16 @@ const poolAbi = [
  */
 async function ensureApproval(signer, token, amount) {
 	const owner = await signer.getAddress();
-	const allowance = await getTokenApprovalRaw(token, owner, SWAPPER_ADDRESS);
+	const allowance = await getTokenApprovalRaw(token, owner, SWAPPER_ADDRESS[currentNetwork]);
 	if (allowance.lt(amount)) {
-		const tx = await setTokenApprovalRaw(signer, token, SWAPPER_ADDRESS, SQRT_PRICE_LIMIT_DOWN);
+		const tx = await setTokenApprovalRaw(signer, token, SWAPPER_ADDRESS[currentNetwork], SQRT_PRICE_LIMIT_DOWN);
 		await tx.wait();
 	}
 }
 
 
 async function findPoolForTokens(token0, token1) {
-	const factory = new ethers.Contract(FACTORY_ADDRESS, poolFactoryAbi, signer.provider);
+	const factory = new ethers.Contract(FACTORY_ADDRESS[currentNetwork], poolFactoryAbi, await getReadProvider());
 	return await factory.getPool(token0, token1, FEE_TIER);
 }
 
@@ -45,7 +51,7 @@ async function findPoolForTokens(token0, token1) {
  */
 async function estimateSwap(signer, tokenIn, tokenOut, amount, exactIn = true) {
 	console.log(signer, tokenIn, tokenOut, amount, exactIn);
-	const factory = new ethers.Contract(FACTORY_ADDRESS, poolFactoryAbi, signer.provider);
+	const factory = new ethers.Contract(FACTORY_ADDRESS[currentNetwork], poolFactoryAbi, signer.provider);
 	const poolAddress = await factory.getPool(tokenIn, tokenOut, FEE_TIER);
 	console.log("Pool: " + poolAddress);
 	if (poolAddress === ethers.ZeroAddress) throw new Error('Pool not found');
@@ -96,7 +102,7 @@ async function executeSwap(signer, tokenIn, tokenOut, amount, exactIn = true) {
 
 	await ensureApproval(signer, tokenIn, tokensIn);
 
-	const swapper = new ethers.Contract(SWAPPER_ADDRESS, swapperAbi, signer);
+	const swapper = new ethers.Contract(SWAPPER_ADDRESS[currentNetwork], swapperAbi, signer);
 
 	if (exactIn) {
 		const tx = await swapper.swapV3ExactIn(poolAddress, zeroForOne, tokensIn, tokensOut);

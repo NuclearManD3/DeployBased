@@ -9,13 +9,6 @@ function saveCache() {
 	localStorage.setItem(TOKEN_INFO_KEY, JSON.stringify(tokenCache));
 }
 
-// Get read-only provider (adjust as needed)
-async function getReadProvider() {
-	if (!window.readProvider)
-		window.readProvider = new ethers.providers.JsonRpcProvider('https://mainnet.base.org');
-	return window.readProvider;
-}
-
 async function _getTokenContract(address, signer=null) {
 	const abi = [
 		'function name() view returns (string)',
@@ -58,6 +51,7 @@ async function getTokenName(address) {
 	address = address.toLowerCase();
 	if (tokenCache[address]?.name) return tokenCache[address].name;
 	const contract = await _getTokenContract(address);
+	console.log(address, provider, contract, currentNetwork);
 	const name = await contract.name();
 	tokenCache[address] = { ...(tokenCache[address] || {}), name };
 	saveCache();

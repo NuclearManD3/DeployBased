@@ -91,6 +91,7 @@ async function getPoolFee(address) {
 // Converts sqrtPriceX96 to normal price, adjusted for token decimals and converted to reserve/launch
 async function getCurrentPrice(address) {
 	const pool = await _getPoolContract(address);
+	console.log(pool, address);
 	const [token0, token1] = await Promise.all([
 		getPoolToken0(address),
 		getPoolToken1(address)
